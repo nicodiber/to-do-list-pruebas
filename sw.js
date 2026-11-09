@@ -1,0 +1,128 @@
+// v0.107.3 (H16): la copia de pruebas usa otra caché (mismo criterio que assets/js/entorno.js) y cada una borra
+// solo sus propias versiones viejas, nunca la caché de la otra.
+const ES_APP_REAL = self.location.hostname === 'nicodiber.github.io' && self.location.pathname.startsWith('/to-do-list/');
+const PREFIJO_CACHE = ES_APP_REAL ? 'super-todo-list-v' : 'super-todo-list-pruebas-v';
+const CACHE_NAME = `${PREFIJO_CACHE}72`;
+
+// Archivos del app shell para que la primera carga offline (sin visitas
+// previas) también funcione. Si agregás un archivo assets/js/*.js o
+// views/*.js nuevo, sumalo también acá (ver AGENTS.md).
+const ARCHIVOS_PRECACHE = [
+  '.',
+  'index.html',
+  'manifest.json',
+  'assets/css/main.css',
+  'assets/icons/icon.svg',
+  'assets/icons/icon-192.png',
+  'assets/icons/icon-512.png',
+  'assets/icons/icon-maskable-512.png',
+  'assets/icons/apple-touch-icon.png',
+  'assets/js/app.js',
+  'assets/js/entorno.js',
+  'assets/js/almacenamiento.js',
+  'assets/js/modelos.js',
+  'assets/js/utilidades.js',
+  'assets/js/reprogramar.js',
+  'assets/js/tareas-logica.js',
+  'assets/js/deshacer.js',
+  'assets/js/revision-dia.js',
+  'assets/js/exportar-calendar.js',
+  'assets/js/clima.js',
+  'assets/js/geocoding.js',
+  'assets/js/vista-agenda.js',
+  'assets/js/ia-conectable.js',
+  'assets/js/google-calendar.js',
+  'assets/js/google-auth.js',
+  'assets/js/google-drive-sync.js',
+  'assets/js/sincronizacion.js',
+  'assets/js/almacenamiento-local.js',
+  'assets/js/borradores.js',
+  'assets/js/dependencias.js',
+  'assets/js/formulario-tarea.js',
+  'assets/js/edicion-masiva.js',
+  'assets/js/plantillas.js',
+  'assets/js/panel-ia-prioridades.js',
+  'assets/js/avisos-sync.js',
+  'assets/js/sonidos.js',
+  'assets/js/tiempo-real.js',
+  'assets/js/cronometro.js',
+  'assets/js/exportar-csv.js',
+  'assets/js/bloques-horarios.js',
+  'assets/js/agendado-segundo-plano.js',
+  'assets/js/avisos.js',
+  'assets/js/conflicto-enlace.js',
+  'assets/js/aviso-sin-hueco.js',
+  'assets/js/modal-tarea.js',
+  'assets/js/carga-tareas.js',
+  'assets/js/dialogo-formulario.js',
+  'assets/js/formularios-entidades.js',
+  'assets/js/ubicacion-actual.js',
+  'assets/js/preferencias-horario.js',
+  'assets/js/checklist-tarjeta.js',
+  'assets/js/atajos.js',
+  'assets/js/preferencias.js',
+  'assets/js/capacidad.js',
+  'assets/js/boton-flotante.js',
+  'assets/js/selector-color.js',
+  'assets/js/vista-semana-preferencias.js',
+  'assets/js/habitos.js',
+  'assets/js/gantt-modelo.js',
+  'assets/js/programador.js',
+  'assets/js/progreso-categorias.js',
+  'views/resumen.view.js',
+  'views/agenda.view.js',
+  'views/semana.view.js',
+  'views/tabla.view.js',
+  'views/categorias.view.js',
+  'views/ubicaciones.view.js',
+  'views/metas.view.js',
+  'views/gantt.view.js',
+  'views/personas.view.js',
+  'views/estadisticas.view.js',
+  'views/habitos.view.js',
+  'views/calendar-pasado.view.js',
+  'views/progreso.view.js',
+  'views/mejoras.view.js',
+  'views/memento.view.js',
+  'views/asistente.view.js',
+  'assets/js/asistente.js',
+  'views/configuraciones.view.js',
+];
+
+self.addEventListener('install', (evento) => {
+  evento.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(ARCHIVOS_PRECACHE.map((url) => new Request(url, { cache: 'reload' }))))
+      .catch((error) => console.warn('No se pudo precachear todo el app shell:', error))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (evento) => {
+  evento.waitUntil(
+    caches
+      .keys()
+      .then((claves) => Promise.all(claves.filter((clave) => clave.startsWith(PREFIJO_CACHE) && clave !== CACHE_NAME).map((clave) => caches.delete(clave))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (evento) => {
+  if (evento.request.method !== 'GET') return;
+
+  const url = new URL(evento.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  evento.respondWith(
+    fetch(evento.request, { cache: 'reload' })
+      .then((respuesta) => {
+        if (respuesta.ok) {
+          const copia = respuesta.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(evento.request, copia));
+        }
+        return respuesta;
+      })
+      .catch(() => caches.match(evento.request))
+  );
+});

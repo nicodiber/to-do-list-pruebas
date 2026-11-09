@@ -1,0 +1,195 @@
+import { estado, persistirYNotificar } from './almacenamiento.js';
+import { ETIQUETAS_ESTADO, ETIQUETAS_UNIDAD_MANTENIMIENTO } from './modelos.js';
+import { hoyISO, diaLocal, fechaISOMasDias, formatearFecha, formatearFechaOFechaHora, escaparHtml } from './utilidades.js';
+import { crearPanelReprogramar } from './reprogramar.js';
+import { reprogramarTareaConCascada, avisoInconsistentes, compararPorPrioridad, ordenarConCadenas, textoRepeticion } from './tareas-logica.js';
+import { evaluarClimaTarea } from './clima.js';
+import { abrirDetalleTarea } from './modal-tarea.js';
+import { avisar } from './avisos.js';
+
+const NOMBRES_DIA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+/**
+ * Día (local) por el que se agrupa una tarea en la agenda:
+ * `tarea_fecha_sugerida` si tiene valor, si no `tarea_fecha_limite`.
+ */
+export function fechaDeReferencia(tarea) {
+  if (tarea.tarea_fecha_sugerida) return diaLocal(tarea.tarea_fecha_sugerida);
+  if (tarea.tarea_fecha_limite) return diaLocal(tarea.tarea_fecha_limite);
+  return null;
+}
+
+/**
+ * Vista de agenda genérica: agrupa las tareas pendientes por día (según
+ * fechaDeReferencia) para los próximos `cantidadDias`, empezando hoy. La
+ * usa la vista Agenda (con su selector de 3, 8 o 15 días).
+ */
+let diaPorEnfocar = null;
+
+/** Pide que la próxima vez que se dibuje la Agenda se desplace hasta ese día (v0.100.0: lo usa Semana al tocar el nombre de un día). */
+export function pedirEnfocarDiaAgenda(fechaISO) {
+  diaPorEnfocar = fechaISO;
+}
+
+const OPCIONES_DIAS_AGENDA = [3, 8, 15];
+
+export function renderVistaAgenda(contenedor, cantidadDias, alCambiarRango = null) {
+  const hoy = hoyISO();
+  // Si el día pedido queda fuera del rango, se usa el más chico que lo incluya (hasta 15).
+  if (diaPorEnfocar) {
+    const necesarios = Math.max(1, Math.round((new Date(`${diaPorEnfocar}T00:00:00`) - new Date(`${hoy}T00:00:00`)) / 86400000) + 1);
+    if (necesarios > cantidadDias) {
+      cantidadDias = OPCIONES_DIAS_AGENDA.find((n) => n >= necesarios) || OPCIONES_DIAS_AGENDA[OPCIONES_DIAS_AGENDA.length - 1];
+      if (alCambiarRango) alCambiarRango(cantidadDias);
+    }
+  }
+  const dias = Array.from({ length: cantidadDias }, (_, i) => fechaISOMasDias(i, hoy));
+
+  const pendientesActivas = estado.tareas.filter((t) => t.tarea_estado !== 'completada');
+  const porDia = new Map(dias.map((d) => [d, []]));
+  pendientesActivas.forEach((tarea) => {
+    const fecha = fechaDeReferencia(tarea);
+    if (fecha && porDia.has(fecha)) porDia.get(fecha).push(tarea);
+  });
+
+  contenedor.innerHTML = `
+    <div class="barra-titulo">
+      <h2>📖 Agenda</h2>
+      <div class="selector-rango" role="group" aria-label="Cantidad de días">
+        ${[3, 8, 15].map((n) => `<button type="button" data-dias="${n}" title="Ver los próximos ${n} días" class="${n === cantidadDias ? 'activo' : ''}">${n} días</button>`).join('')}
+      </div>
+    </div>
+    <p class="ayuda">Tareas con fecha límite o sugerida en este período — para anticipar cuellos de botella antes de que se conviertan en urgencias.</p>
+    <div class="agenda"></div>
+  `;
+
+  contenedor.querySelectorAll('.selector-rango button').forEach((boton) => {
+    boton.addEventListener('click', () => {
+      const dias = Number(boton.dataset.dias);
+      if (alCambiarRango) alCambiarRango(dias);
+      renderVistaAgenda(contenedor, dias, alCambiarRango);
+    });
+  });
+
+  const contenedorAgenda = contenedor.querySelector('.agenda');
+  dias.forEach((fechaDia) => {
+    contenedorAgenda.appendChild(renderColumnaDia(fechaDia, hoy, porDia.get(fechaDia)));
+  });
+
+  if (diaPorEnfocar) {
+    const columna = contenedorAgenda.querySelector(`[data-dia="${diaPorEnfocar}"]`);
+    diaPorEnfocar = null;
+    if (columna) {
+      columna.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      columna.classList.add('dia-enfocado');
+      setTimeout(() => columna.classList.remove('dia-enfocado'), 2000);
+    }
+  }
+}
+
+function renderColumnaDia(fechaDia, hoy, tareasDelDia) {
+  const seccion = document.createElement('section');
+  seccion.className = 'columna-dia' + (fechaDia === hoy ? ' es-hoy' : '');
+  seccion.dataset.dia = fechaDia;
+  const fechaObj = new Date(fechaDia + 'T00:00:00');
+  const nombreDia = fechaDia === hoy ? 'Hoy' : NOMBRES_DIA[fechaObj.getDay()];
+
+  seccion.innerHTML = `
+    <h3>${nombreDia} <span class="fecha-columna">${formatearFecha(fechaDia)}</span></h3>
+    <ul class="lista-tareas"></ul>
+  `;
+
+  const lista = seccion.querySelector('ul');
+  if (tareasDelDia.length === 0) {
+    lista.innerHTML = '<p class="mensaje-vacio">Sin tareas para este día.</p>';
+  } else {
+    ordenarConCadenas(
+      tareasDelDia.sort(
+        (a, b) =>
+          (a.tarea_fecha_sugerida || '').localeCompare(b.tarea_fecha_sugerida || '') ||
+          compararPorPrioridad(a, b, estado.categorias)
+      )
+    ).forEach((tarea) => lista.appendChild(renderTarjetaTarea(tarea)));
+  }
+
+  return seccion;
+}
+
+/** `soloInfo` (v0.93.0): sin "⏭️ Posponer" ni panel de reprogramar — la usa el modal de detalle (doble clic),
+ * que arma su contenido con esta misma tarjeta en modo solo-info (mismo patrón que `renderItem` en
+ * `views/resumen.view.js`). */
+function renderTarjetaTarea(tarea, { soloInfo = false } = {}) {
+  const categoria = estado.categorias.find((c) => c.categoria_id === tarea.categoria_id);
+  const ubicacion = estado.ubicaciones.find((u) => u.ubicacion_id === tarea.ubicacion_id);
+  const dependeDe = tarea.tarea_dependiente ? estado.tareas.find((t) => t.tarea_id === tarea.tarea_dependiente) : null;
+  const bloqueada = tarea.tarea_estado === 'bloqueada';
+
+  const li = document.createElement('li');
+  li.className = 'item-tarea' + (bloqueada ? ' bloqueada' : '');
+  li.innerHTML = `
+    <div class="item-tarea-info">
+      <strong>${escaparHtml(tarea.tarea_nombre)}</strong>
+      <span class="etiquetas">
+        ${tarea.tarea_urgente ? '<span class="etiqueta-fecha">🔴 Urgente</span>' : ''}
+        ${categoria ? `<span class="etiqueta" style="background:${categoria.categoria_color}">${escaparHtml(categoria.categoria_nombre)}</span>` : ''}
+        ${tarea.tarea_fecha_sugerida ? `<span class="etiqueta-fecha etiqueta-agendada">Sugerida: ${formatearFechaOFechaHora(tarea.tarea_fecha_sugerida)}</span>` : ''}
+        ${tarea.tarea_fecha_limite ? `<span class="etiqueta-fecha">Límite: ${formatearFechaOFechaHora(tarea.tarea_fecha_limite)}</span>` : ''}
+        <span class="etiqueta-fecha">${ETIQUETAS_ESTADO[tarea.tarea_estado]}</span>
+        ${
+          tarea.tarea_mantenimiento && textoRepeticion(tarea)
+            ? `<span class="etiqueta-fecha etiqueta-mantenimiento">🔁 ${textoRepeticion(tarea)}${tarea.tarea_dia_obligatorio ? ' 📌' : ''}</span>`
+            : ''
+        }
+        ${ubicacion ? `<span class="etiqueta-fecha">📍 ${escaparHtml(ubicacion.ubicacion_nombre)}</span>` : ''}
+        ${tarea.tarea_costo_estimado ? `<span class="etiqueta-fecha">💰 $${tarea.tarea_costo_estimado}</span>` : ''}
+        <span class="etiqueta-fecha etiqueta-clima" hidden></span>
+      </span>
+      ${bloqueada && dependeDe ? `<p class="aviso-bloqueada">Bloqueada por: ${escaparHtml(dependeDe.tarea_nombre)}</p>` : ''}
+      ${soloInfo ? '' : '<div class="contenedor-panel-reprogramar" hidden></div>'}
+    </div>
+    ${soloInfo ? '' : '<div class="item-tarea-acciones"><button title="Posponer: elegir otra fecha para la tarea" type="button" data-accion="posponer">⏭️ Posponer</button></div>'}
+  `;
+
+  const etiquetaClima = li.querySelector('.etiqueta-clima');
+  evaluarClimaTarea(tarea).then((resultado) => {
+    if (!resultado || resultado.favorable) return;
+    etiquetaClima.textContent = `🌧️ Lluvia probable (${resultado.probabilidadLluvia}%) — considerá posponer`;
+    etiquetaClima.hidden = false;
+  });
+
+  if (soloInfo) return li;
+
+  const contenedorPanel = li.querySelector('.contenedor-panel-reprogramar');
+  li.querySelector('[data-accion="posponer"]').addEventListener('click', () => {
+    const yaAbierto = !contenedorPanel.hidden;
+    contenedorPanel.innerHTML = '';
+    contenedorPanel.hidden = true;
+    if (yaAbierto) return;
+
+    const panel = crearPanelReprogramar({
+      diasHabiles: tarea.tarea_dias_habiles,
+      onConfirmar: async (fechaSugeridaISO) => {
+        const inconsistentes = reprogramarTareaConCascada(tarea, fechaSugeridaISO, estado.tareas, { fijar: true });
+        contenedorPanel.hidden = true;
+        contenedorPanel.innerHTML = '';
+        await persistirYNotificar();
+        const aviso = avisoInconsistentes(inconsistentes);
+        if (aviso) await avisar(aviso);
+      },
+      onCancelar: () => {
+        contenedorPanel.hidden = true;
+        contenedorPanel.innerHTML = '';
+      },
+    });
+    contenedorPanel.appendChild(panel);
+    contenedorPanel.hidden = false;
+  });
+
+  li.addEventListener('dblclick', (evento) => {
+    if (evento.target.closest('button, a, input, select')) return;
+    const contenido = renderTarjetaTarea(tarea, { soloInfo: true }).querySelector('.item-tarea-info');
+    abrirDetalleTarea(tarea, contenido, { mostrarCumplida: true });
+  });
+
+  return li;
+}

@@ -1,0 +1,1491 @@
+# Changelog
+
+Formato de versión: `vMayor.Menor.Parche` (semver).
+
+## [v0.107.3] - 2026-11-08
+
+### Agregado
+
+- **Entorno de pruebas con datos separados** (H16): fuera de la app real (`nicodiber.github.io/to-do-list/`) —la URL de pruebas de `develop` o una copia local— STDL usa otra base local (`super-todo-list-pruebas`), otro archivo de Drive (`super-todo-list-pruebas-datos.json`), otras preferencias y otra caché, y se marca con «🧪 PRUEBAS» (versión, título de la pestaña y una franja arriba). Así nunca lee ni escribe los datos reales: para probar con tus datos se importa una copia de seguridad exportada. En la app real todos los nombres quedan exactamente iguales. Nuevo `assets/js/entorno.js`.
+- **Pista de cuenta para renovar la sesión de Google en silencio** (H14, primer paso): al conectarse se recuerda en el navegador el email de la cuenta (vía Drive `about`, sin permisos nuevos) y se le pasa a Google en cada renovación. Con varias cuentas de Google abiertas en el navegador, la renovación silenciosa no sabía cuál usar y terminaba pidiendo «Reconectar». El registro de Configuraciones → «Sesión de Google» lo anota como «👤 Cuenta recordada».
+
+### Cambiado
+
+- **Backlog en formato kanban** (📥 Backlog → ✅ Listo para hacer → 🔨 En curso → 🧪 Para probar → ✔️ Hecho), con las historias de usuario H01-H16. No se perdió ningún ítem (verificado línea por línea).
+- La caché del service worker borra solo sus propias versiones viejas, nunca la del otro entorno.
+
+## [v0.107.2] - 2026-11-08
+
+### Corregido
+
+- **La primera vez que una tarea repite en día fijo no respetaba ese día** (H04): solo las copias que nacen al cumplir una tarea guardaban el día que les toca (`tarea_mantenimiento_objetivo`); la tarea original no, y el agendado la ubicaba en cualquier hueco libre. Caso real: «Update AEP depto», el día 1 de cada mes con sábado y domingo como días permitidos, quedaba el sábado 7/11 en vez del domingo 1/11. Ahora `anclarRepeticionesDiaFijo` le calcula ese día (desde hoy o desde su habilitación, inclusive, aplicando los días hábiles) antes de cada agendado y la deja ese día sin hora para que el agendado le busque el hueco. Si se cambia la regla del día fijo (o sus días hábiles) al editar, se recalcula. No pisa una fecha fijada con 📌 ni una fecha límite cargada a mano.
+
+### Agregado
+
+- **Pruebas automáticas sin dependencias** en `pruebas/` (`node --test pruebas/*.test.js`, Node 22+), empezando por las repeticiones en día fijo.
+
+## [v0.107.1] - 2026-10-05
+
+### Corregido
+
+- **Eventos de Semana con el color genérico (gris)** en vez del de su calendario: si la lista de calendarios fallaba un momento (red, token), el fallo se guardaba en la caché y, mientras duraba, STDL leía solo el calendario principal con un gris de relleno —y esos eventos se guardaban así—. Ahora un fallo no se cachea, se usa la última lista de calendarios conocida (con sus colores, recordada en este navegador) y las lecturas hechas con una lista degradada no se guardan, así el próximo dibujo reintenta y recupera los colores reales.
+
+## [v0.107.0] - 2026-10-05
+
+Ajustes visuales, personas por etiqueta y horario preferido por tarea.
+
+### Agregado
+
+- **🕓 Horario preferido por tarea** (`tarea_horario_preferido`: mañana 6–12, tarde 12–18, noche 18–24; campo en el formulario de la tarea): el agendado (`buscarHuecoLibre`, opción `preferido`) busca primero dentro de esa franja y de tus horarios disponibles de cada día; si ese día no hay lugar en la franja, usa el resto del día (no retrasa la tarea a otro día por la preferencia). Cierra el ítem «Horario preferido por tarea o hábito» del backlog.
+- **Personas agrupadas por etiqueta**: un grupo por etiqueta (por nombre) y «Sin etiqueta» al final; dentro de cada grupo se mantiene el orden de último contacto (más tiempo sin contacto primero, fallecidas al final).
+
+### Cambiado
+
+- **Resumen → Vencidas** se muestra abierta por defecto cuando tiene al menos una tarea.
+- **Resumen → Próximos por categoría** ahora sigue el orden de la jerarquía de categorías (`categoria_prioridad`, el mismo de Categorías); antes salía en el orden en que estaban guardadas las categorías raíz.
+- **Título y controles en la misma línea** en Agenda (3/8/15 días), Gantt, Estadísticas, Mejoras y Memento mori, como en Semana.
+- **Menú lateral**: la versión va debajo de «STDL» y también se ve con el menú compactado.
+- **Gantt y Tabla** muestran todas las tareas y se desplazan hacia abajo con la página, no dentro del recuadro (solo conservan scroll propio hacia el costado). Consecuencia: los encabezados de columnas ya no quedan fijos al desplazarse hacia abajo.
+
+## [v0.106.1] - 2026-10-05
+
+### Corregido
+
+- **Tareas vencidas que no aparecían en «Vencidas» (Resumen)**: una tarea con el límite ya pasado y la sugerida posterior a ese límite caía en «⚠️ Sin hueco antes del límite» (que se calcula primero y se las quedaba) en vez de «Vencidas». Con el límite vencido ya no hay un «antes del límite» al que llegar, así que esa sección solo toma tareas con límite vigente; las vencidas van a Vencidas (o a Urgentes, si están bloqueadas). El aviso al iniciar («No hay hueco libre antes de su fecha límite») aplica el mismo criterio.
+
+## [v0.106.0] - 2026-10-04
+
+Fecha sugerida fija (lo que fijás vos, STDL no lo mueve), asistente de IA con tu propia clave (etapa 1), cronómetro por tarea y exportar a CSV.
+
+### Agregado
+
+- **🤖 Asistente de IA (etapa 1)** (módulo nuevo antes de Configuraciones; `assets/js/asistente.js`, `views/asistente.view.js`): un chat por **texto o voz** (🎤 dictado y «🔊 Leer en voz alta») con un modelo de Claude que lee tus tareas y **propone** cambios: crear (varias a la vez, «cargá estas tareas…»), editar (replanificar, cambiar duración, categoría, límite…), completar o eliminar. **Cada usuario carga su propia clave de API de Anthropic** (Configuraciones → Asistente de IA, o ⚙️ en el módulo): queda solo en ese navegador (nunca en Drive ni en el repositorio) y las consultas salen directo del navegador a Anthropic; el uso se cobra a la cuenta de cada quien. Modelo a elegir (por defecto Claude Opus 5.5; también Sonnet 5.5 y Haiku 4.5). **El asistente nunca cambia nada solo**: cada propuesta aparece como una tarjeta con los cambios **resaltados** (valor de ahora tachado y el propuesto en verde), con todos los campos **editables a mano**, y se aprueba o rechaza **una por una**; lo que ajustaste se le cuenta al modelo. Aplicar usa los mismos caminos que la app (cascada de dependencias, agendado en segundo plano, deshacer con Ctrl+Z). Errores claros (clave inválida, sin saldo, límite de uso, sin conexión). La conversación vive en memoria (no se guarda).
+- **📌 Fecha sugerida fija** (`tarea_fecha_fija`): cuando **vos** ponés un horario (formulario con fecha y hora —se marca solo «📌 Fijar este horario»—, «⏭️ Posponer», arrastrar en Semana o Gantt, edición masiva, asistente), STDL **no lo mueve** (ni reubica, ni adelanta, ni reordena, ni lo corre en una cascada) hasta que pasa su hora más su duración estimada; después vuelve a ser una sugerencia de STDL. Se ve con 📌 en la Tabla y en Semana. Si un horario fijado choca con un evento de Calendar se deja donde está y se avisa al iniciar. Lo que agenda STDL sola y lo urgente no se fija. Las tareas anteriores a la v0.106.0 empiezan como «de STDL».
+- **⏱️ Cronómetro por tarea** (`assets/js/cronometro.js`): botón ▶/⏹ en cada fila de la Tabla (muestra el tiempo medido). Al completar la tarea, el tiempo medido se anota **solo** como tiempo real (alimenta Estadísticas → estimado vs. real) sin preguntar. Sobrevive a cerrar la pestaña o cambiar de dispositivo (`tarea_cronometro_inicio`, `tarea_tiempo_acumulado_min`).
+- **📊 Exportar a CSV** (`assets/js/exportar-csv.js`; Configuraciones → Copia de seguridad): «Tareas (CSV)» y «Cumplimientos (CSV)» para abrir en Excel o Google Sheets (separador «;», UTF-8 con BOM, celdas protegidas de fórmulas). Es solo para analizar: la copia restaurable sigue siendo el JSON.
+
+### Cambiado
+
+- `privacidad.html` aclara que, si el usuario usa el asistente, el navegador envía a Anthropic (con la clave del propio usuario) su consulta y las tareas que el asistente necesita para responder.
+
+## [v0.105.0] - 2026-10-04
+
+Horarios disponibles por bloques, recordatorio de copia de seguridad y plan de contingencia, delegaciones, memento mori, y documentos de requerimientos e investigación de competencia.
+
+### Cambiado
+
+- **Horarios disponibles por bloques** (`assets/js/bloques-horarios.js`; Configuraciones → Tiempo disponible → «Horarios disponibles por día de la semana»): cada día de la semana tiene uno o varios bloques «desde–hasta». Por defecto uno de 00:00 a 24:00, como antes. El editor valida que los bloques no se pisen, no queden pegados (se unen en uno) y no sumen más de 24 h; un día sin bloques es un día libre; «＋ Bloque» agrega uno en el primer hueco con 30 min de respiro y «📋 Copiar a todos» replica un día. **Reemplazan a la franja horaria global y al tope de minutos por día** (`pref_franja`/`pref_tope_dias` ya no se editan; quien los tenía cargados los ve convertidos a bloques). El agendado solo propone horas dentro de los bloques (`buscarHuecoLibre` con `bloquesPorDia`), la capacidad del día es la suma de sus bloques menos tus eventos (`capacidad.js`), Semana muestra la grilla del rango que cubren los bloques y **sombrea las horas fuera de ellos**, y el Gantt sombrea los días sin bloques.
+
+### Agregado
+
+- **Recordatorio de copia de seguridad**: si pasaron más de N días (30 por defecto; configurable o «nunca» en Configuraciones → Copia de seguridad) desde la última exportación en este dispositivo, una ventana te lo recuerda y exporta en un clic (`copiaVencida`, `avisos-sync.js`). **`PLAN_B.md`**: qué hacer si se cae Google o GitHub Pages, cómo servir la app desde otro hosting (y el origen que hay que autorizar en Google Cloud) y qué pasa si se cierra el navegador antes de «guardado».
+- **Delegaciones**: en el formulario de la tarea, «🤝 Delegada a» (una persona) y «📅 Seguimiento» (fecha). El día del seguimiento aparece la sección **🤝 Seguimientos** en Resumen con «✔️ Resuelta», «⏭️ Recordármelo en… (1 día, 3 días, 1 semana, 2 semanas)», «✏️ Editar» y «🔕 Sin seguimiento». La Tabla tiene la columna «Delegada a». Eliminar a la persona deja la tarea sin delegar (`tarea_delegada_a`, `tarea_seguimiento_fecha`).
+- **⏳ Memento mori** (módulo nuevo antes de Configuraciones): el calendario de tu vida en semanas, meses o años (`views/memento.view.js`). Pide la **fecha de nacimiento una sola vez** y la guarda en las preferencias de tu Drive (`pref_fecha_nacimiento`); expectativa de vida editable (80 años por defecto).
+- **`REQUERIMIENTOS.md`**: requerimientos funcionales y no funcionales de más simples a más complejos, con su estado y dónde se implementan. **`INVESTIGACION_COMPETENCIA.md`**: Reclaim.ai, Swift To-Do List, Motion, Sunsama, Morgen y Akiflow frente a STDL, con siete ideas recomendadas (horario preferido por tarea, carga con lenguaje natural, cronómetro, tiempos de traslado, bloques de foco, exportar a CSV y nivel de energía).
+
+## [v0.104.0] - 2026-10-03
+
+Sonidos, animaciones, hábitos más cómodos, limpieza de completadas, clima por ubicación del dispositivo, dictado por voz, Gantt con días no hábiles y zoom por día, y estadísticas de Google Calendar y de tiempo real.
+
+### Agregado
+
+- **Sonidos sintetizados** (`assets/js/sonidos.js`, Web Audio API, sin archivos de audio): al agregar una tarea, **sonido de satisfacción al completarla** (arpegio ascendente), eliminar, deshacer/rehacer, avisos y un toque casi imperceptible al apretar botones y módulos del menú. Configuraciones → «Sonidos»: interruptor, volumen y «▶️ Probar». La preferencia es de cada dispositivo. Un sonido repetido (eliminar varias a la vez) no se apila.
+- **Animaciones suaves**: fundido al cambiar de módulo (solo al cambiar, no en cada redibujado), aparición de las ventanas y de las filas desplegables, transiciones en botones y filas. Respetan «reducir movimiento» del sistema.
+- **Hábitos**: botón 🙈 para **ocultar** un hábito que ya no se hace (no se borra nada; «Mostrar los N ocultos» y «↩️ Mostrar», `pref_habitos_ocultos`, sincronizado con Drive) y **calendario anual estilo GitHub** al tocar el nombre de un hábito (último año en columnas de semanas, con racha y porcentaje).
+- **Configuraciones → Limpiar tareas completadas**: elimina las completadas hace más de 30 días / 90 días / 6 meses / 1 año, con confirmación y deshacer. No toca el historial de hábitos (los cumplimientos se conservan) ni las completadas que otra tarea usa como referencia (`tareasCompletadasLimpiables`).
+- **Clima por la ubicación del dispositivo** (Configuraciones → Clima → «📡 Usar la ubicación de este dispositivo»): el pronóstico de Semana sigue tu ubicación cuando viajás (el navegador pide permiso; coordenadas redondeadas a ~1 km, solo para pedir el pronóstico; opción de cada dispositivo). Si falla, usa la ubicación fija. Las tareas «requiere buen tiempo» sin ubicación propia también la usan.
+- **Micrófono** en el alta de tareas (🎤 junto al nombre): dicta el nombre con el reconocimiento de voz del navegador (`es-AR`). Solo aparece donde el navegador lo ofrece (Chrome, Edge); el texto queda en el campo para corregirlo.
+- **Gantt**: fondos tenues en **fines de semana y días sin tiempo disponible** (los que pusiste en 0 en Configuraciones) y **zoom «1 sem.»** (por día).
+- **Estadísticas → 📅 Calendar**: qué pasó realmente en tu Google Calendar en los últimos 7, 30 o 90 días (eventos con horario que ocuparon tiempo): total y promedio de horas, por calendario, por semana y por día de la semana, comparado con lo que cumpliste en STDL (`obtenerEventosPasados`, `google-calendar.js`).
+- **Tiempo real de las tareas** (`assets/js/tiempo-real.js`): opcional (Configuraciones → «Preguntar cuánto tardé al completar una tarea», apagado por defecto); al completar una tarea pregunta cuántos minutos tardó y lo guarda en su cumplimiento (`cumplimiento_duracion_estimada` / `_real`). Estadísticas → Resumen → «⏱️ Estimado vs. real» compara por categoría y, con 3 o más registros y una diferencia de 15 % o más, ofrece **ajustar las duraciones pendientes** de la categoría, siempre con confirmación y deshacer.
+
+## [v0.103.0] - 2026-10-03
+
+Rediseño de la barra de la vista Semana y dos mejoras del Gantt.
+
+### Cambiado
+
+- **Semana, una sola barra**: a la izquierda «📆 Semana» y los atajos de 1, 3, 7, 8 y 15 días; a la derecha la escala de colores (solo cuando corresponde) y los botones «🌅 Sol», «🌡️ Temperatura» y «🌧️ Lluvia». «Ninguno» ya no aparece: Temperatura y Lluvia son excluyentes (tocar el activo lo apaga; sin ninguno activo no hay fondo de clima). La navegación de fechas (‹ ›) queda debajo. En pantallas angostas la barra se parte en dos líneas.
+- **Por defecto**: 8 días, Sol y Lluvia activados (las preferencias de Sol y clima usan claves nuevas, así que el cambio también le llega a quien las había guardado apagadas).
+- **Escala de temperatura de 0 °C a 35 °C** (antes de −10 °C a 35 °C): por debajo de 0 queda el primer color y por encima de 35 el último. La leyenda de lluvia se compactó para entrar en la barra.
+- **Gantt, modo Ventana**: una tarea activa **sin fecha límite** ahora se dibuja como una barra que sigue hacia la derecha y se desvanece («∞ ▶»), en vez de caer en la barra del día plan. El rombo del día plan y las flechas de dependencia se mantienen.
+- **Gantt, líneas por día**: además de la línea fuerte de cada semana (lunes), cada día tiene una línea más tenue.
+
+## [v0.102.0] - 2026-10-03
+
+Menú lateral de módulos, la vista Tareas pasa a la Tabla, avisos grandes en ventanas modales y dos correcciones (falsa alerta de «sin hueco» y guardado lento al agregar).
+
+### Corregido
+
+- **Falsa alerta «No hay hueco libre antes de su fecha límite»** al iniciar: el aviso juntaba lo que informaban, en secuencia, el reprogramado de vencidas, la reubicación y el agendado, sin volver a mirar. Un paso posterior (por ejemplo el reordenado) solía acomodar lo que uno anterior no había podido, y al ir a ver la tarea estaba bien ubicada. Ahora el aviso se calcula contra el **estado final** (`filtrarSinHuecoVigente`, `aviso-sin-hueco.js`): solo nombra las tareas que siguen sin hora, con hora posterior a su límite o con hora ya pasada. Lo mismo vale para el aviso al crear o editar tareas.
+- **«Agregar» tardaba mucho sin dar señales**: el botón esperaba a leer Calendar, buscar huecos y reordenar antes de guardar. Ahora la tarea se guarda al instante y el horario sugerido se calcula **en segundo plano** (`agendado-segundo-plano.js`; las corridas se encolan y el aviso de «sin hueco», si corresponde, espera a que no haya otra ventana abierta). Además todo formulario en ventana muestra el botón en «⏳ Agregando…» / «⏳ Guardando…» mientras guarda y no se puede enviar dos veces.
+
+### Cambiado
+
+- **Menú lateral** en lugar de las pestañas de arriba (`index.html`, `app.js`): «STDL», la versión, el estado de Drive («Último guardado en Drive… · Verificado… · Calendar leído…») con «🔄 Sincronizar ahora», los módulos, deshacer y rehacer, «Completar carga» y «＋ Nueva tarea». Se **compacta a solo emojis** (««»/«»») y recuerda el estado en este navegador; en pantallas angostas se abre como un panel con el botón ☰. Orden de los módulos: Resumen, Agenda, Semana, Gantt, Tabla, Metas, Estadísticas, Mejoras, Personas, Ubicaciones, Categorías y Configuraciones; las teclas 1…9 y 0 siguen ese orden (Ubicaciones = 0; Categorías y Configuraciones, sin tecla). La tecla «?» sigue abriendo la ayuda de atajos, ya actualizada; además la lista está en una sección nueva de **Configuraciones → Atajos de teclado** (se sacó el botón ⌨️).
+- **La vista Tareas se eliminó: la Tabla ocupa su lugar** (`#/tareas` lleva a `#/tabla`). La Tabla suma el filtro **Ubicación**, el interruptor **Agrupar por categoría**, los botones **📋 Plantillas** y **🤖 Reestructurar prioridades con IA** (`panel-ia-prioridades.js`) y una columna **Acciones** por fila: cambiar el estado (con la nota de mejora al completar una tarea con repetición), **⏭️ Posponer**, **☑️ checklist** tildable (aparece como fila desplegable) y un menú **⋯** con Editar, Duplicar, Crearle tarea previa / posterior, Guardar cadena como plantilla y Eliminar. «Ver tareas» de Categorías abre la Tabla con esa categoría.
+- **Tabla, columna «Fecha» eliminada** (era la sugerida o, sin ella, el límite): queda «Sugerida», ahora visible por defecto (la preferencia de columnas guardada se migra sola).
+- **Avisos grandes como ventanas modales** (`avisos-sync.js`): sesión de Google vencida (cuando la reconexión automática no alcanzó), calendario que no se pudo leer, cambios de otro dispositivo, datos de una versión anterior, reloj desfasado, errores de sincronización y avisos de sincronización. Cada situación se muestra **una vez**, cuando no hay otra ventana abierta ni texto a medio escribir, y no se repite mientras siga igual; el estado permanente y el botón «🔑 Reconectar» quedan en el menú lateral. Desaparecieron los banners de arriba.
+
+### Agregado
+
+- **Hábitos**: segunda frase («La maldición de la disciplina es que todos los días parecen iguales…»).
+
+## [v0.101.1] - 2026-10-01
+
+Corrección: la sesión de Google quedaba en «vencida» y no había forma de reconectar.
+
+### Corregido
+
+- **Sin botón para reconectar**: en la v0.100.0 el aviso con el botón «Reconectar Drive» pasó a mostrarse solo si había cambios sin subir o tareas sin horario, y el texto del indicador decía que «se reconecta sola con tu próximo clic». Cuando Google exige interacción (el intento silencioso falla), nada conectaba y la única salida estaba oculta. Ahora, con la sesión vencida, la cabecera **siempre** muestra «🔑 Reconectar» (abre la ventana de Google), y «Sincronizar ahora» sin sesión hace lo mismo en vez de fallar en silencio. Si el intento silencioso del primer clic no alcanza, el texto pasa a «Hace falta reconectar con Google».
+- **Intentos silenciosos en cada clic**: la renovación de la v0.100.0 también reintentaba, con cada clic o tecla, una ventana silenciosa cuando ya no había sesión; si Google necesita interacción eso nunca conecta y además competía con el botón. Ahora la renovación solo actúa sobre un token que todavía sirve (y, si falla, espera 5 minutos antes de insistir); recuperar una sesión perdida queda en el primer intento silencioso y el botón «Reconectar».
+- **Intento silencioso colgado**: si Google nunca contestaba (ventana bloqueada o cerrada), la reconexión automática quedaba trabada hasta recargar. Ahora se da por fallida a los 20 segundos.
+
+## [v0.101.0] - 2026-10-01
+
+Rediseño de las tareas con repetición, enlaces entre tareas más cómodos, colores de Calendar, última lectura de Calendar y documentos para abrir la app a otros usuarios.
+
+### Cambiado
+
+- **Tareas con repetición** (`assets/js/tareas-logica.js`, `assets/js/formulario-tarea.js`; decisiones de `REDISENO.md`):
+  - **La copia nace con fecha sugerida, sin límite duro.** Al completar una tarea con repetición, la copia nace con `tarea_fecha_sugerida` = el día que le toca (antes `tarea_fecha_limite`). Ese día también se guarda en `tarea_mantenimiento_objetivo`, que no cambia cuando el agendado le mueve la hora. Las copias que ya existían no se tocan.
+  - **Repetición en día fijo**: además de «cada N días/semanas/meses desde que la cumplo», se puede elegir «el día N de cada mes» (en un mes más corto, el último día) o «todos los lunes y jueves…» (`tarea_mantenimiento_dia_fijo`).
+  - **Interruptor «📌 Día obligatorio»** (`tarea_dia_obligatorio`): la copia nace con ese día también como fecha límite, el agendado no la mueve de día (`adelantarTareasSiHayHuecoMejor` y `reordenarSugeridasPorPrioridad` la saltean) y su holgura la prioriza.
+  - **Los días hábiles mandan**: si el día calculado no es hábil, la repetición pasa al próximo día hábil («cada 1 día» con martes y jueves = cada día hábil). Sin días hábiles todo sigue igual.
+  - **Orden del agendado**: una repetición sin límite ordena por su día objetivo (límite blando) en vez de quedar al final de la cola; nunca se agenda antes de ese día ni se adelanta antes de él.
+  - **Hábitos**: sin fecha límite, el incumplimiento se mide contra el día objetivo (`fechaObjetivoMantenimiento`, `modelos.js`).
+- **Desplegables de enlaces** (Depende de, Bloquea a, desencadenante): campo para filtrar por nombre o categoría (sin importar acentos ni mayúsculas); las opciones de «Depende de» y «Bloquea a» van agrupadas por categoría y las que crearían un ciclo ya no se ocultan: aparecen deshabilitadas con el motivo.
+- **Conflicto al enlazar tareas**: la ventana explica el motivo y lista las tareas involucradas (`assets/js/conflicto-enlace.js`), cada una con un botón «✏️» que abre su edición encima, para ajustarla ahí mismo y volver a intentar.
+- **Aviso de «sin hueco antes del límite»** en el momento: al crear o editar tareas (también en edición masiva, «Completar carga» y al usar una plantilla), si alguna quedó agendada después de su fecha límite, una ventana la nombra (`assets/js/aviso-sin-hueco.js`). Antes solo se avisaba al iniciar.
+- **Semana, colores de eventos**: la API de Google devuelve la paleta *clásica* de colores de evento (`/colors`), distinta de la que muestra hoy Google Calendar; ahora los eventos con color propio usan la paleta actual (`PALETA_EVENTOS_ACTUAL`, `google-calendar.js`). Los que usan el color de su calendario no cambian.
+
+### Agregado
+
+- **Cabecera**: «Calendar leído: hoy 14:02» muestra cuándo se leyeron por última vez tus eventos de Google Calendar completos (se recuerda en este navegador).
+- **`privacidad.html` y `terminos.html`**: política de privacidad y condiciones del servicio, para la pantalla de consentimiento de Google. Falta completar el correo de contacto (marcado en ambas).
+- **`ACCESO_USUARIOS_PRUEBA.md`**: cómo dar y quitar acceso a usuarios de prueba, qué hacer ante sesiones que se pierden seguido y cómo publicar la app.
+
+## [v0.100.0] - 2026-10-01
+
+La sesión de Google se mantiene sola, los avisos viven dentro de la app y varios ajustes chicos de Tareas, Tabla, Resumen y Semana.
+
+### Cambiado
+
+- **Sesión de Google** (`assets/js/almacenamiento.js`, `assets/js/google-auth.js`): el token (dura ~1 hora y vive solo en memoria) se **renueva en silencio** cuando le quedan menos de 15 minutos, en cada clic o tecla (Google solo deja abrir su popup silencioso con un gesto del usuario) y al volver a la pestaña. Mientras se usa la app la sesión se mantiene sola. El aviso grande «Falta reconectar con Google» ahora solo aparece si hay algo esperando (cambios sin subir a Drive o tareas sin horario, con la cantidad); si no, alcanza con el indicador de la cabecera, que dice que se reconecta con el próximo clic.
+- **Avisos y preguntas propios** (`assets/js/avisos.js`: `avisar`, `confirmar`, `pedirTexto`): se reemplazaron los ~80 `alert()`, `confirm()` y `prompt()` del navegador («nicodiber.github.io dice…») por ventanas dentro de la app, apilables sobre otra ventana abierta, con Enter para aceptar y Esc para cancelar; eliminar y descartar llevan el botón principal en rojo. Incluye el aviso «Al iniciar: se reprogramó…».
+- **Duración por defecto de una tarea nueva: 15 minutos** (antes 30; las tareas existentes no cambian). Lo mismo en los pasos de plantilla.
+- **Disfrute heredado**: una tarea sin disfrute propio usa el de su categoría (`disfruteEfectivo`, `tareas-logica.js`), calculado al leer y sin guardarlo; la Tabla lo muestra atenuado como «heredado de la categoría».
+- **Resumen, «Urgentes»** incluye las tareas con fecha límite hoy **o mañana** (ya no aparecen de nuevo en «Mañana»).
+
+### Agregado
+
+- **Registro de la sesión de Google** (Configuraciones → «🔑 Sesión de Google»): las últimas 30 conexiones, renovaciones y fallos con su motivo, guardadas solo en este navegador. Sirve para investigar por qué una cuenta o navegador pierde la sesión más seguido.
+- **Tabla**: «Habilitada desde» muestra «Ahora» cuando la tarea activa ya se puede empezar.
+- **Mejoras**: sin pendientes ya no muestra «(0)»; con pendientes muestra la cantidad y el botón se resalta.
+- **Semana**: tocar el nombre de un día lleva a la Agenda, desplazada hasta ese día (amplía el rango de la Agenda si hace falta); con el fondo de clima activo aparece una leyenda de colores (temperatura en °C; para la lluvia el pronóstico da la **probabilidad** en %, no milímetros).
+- **Alta de tarea**: los campos que el usuario ya completó o cambió se resaltan.
+
+## [v0.99.0] - 2026-10-01
+
+Ninguna tarea activa queda sin fecha y hora sugerida, el agendado respeta el orden de la Tabla, y plantillas de cadenas.
+
+### Corregido
+
+- **Tareas sin fecha y hora sugerida en la Tabla**. Causas encontradas: (1) las tareas de **mantenimiento nunca se agendaban** (el agendado y el reordenado las excluían, y el clon que crea `completarTarea` nace sin sugerida) — ahora entran como cualquier otra; (2) si **no había hueco antes de la fecha límite** la tarea quedaba sin hora — ahora se agenda igual, **después** del límite (queda visible en "⚠️ Sin hueco antes del límite" de Resumen y sigue avisando al iniciar); solo queda sin hora si no hay ningún hueco en todo el horizonte (90 días por defecto); (3) el día elegido por capacidad podía no tener un hueco contiguo y la tarea quedaba sin hora — ahora sigue con el día siguiente; (4) tareas creadas por caminos sin disparador de agendado esperaban hasta 5 minutos — nueva **red de seguridad** (`app.js`): tras cada cambio, si hay tareas activas sin hora y Calendar está listo, las agenda (solo rellena huecos, sin reordenar lo que el usuario movió).
+- **Tabla, columna Sugerida**: una tarea activa sin hora muestra "⏳ Sin agendar" (con el motivo) en vez de quedar vacía.
+
+### Cambiado
+
+- **El agendado sigue el orden de la Tabla (Holgura)**: nueva `compararParaAgendar` (`assets/js/tareas-logica.js`): primero la holgura en horas (urgente sin límite = hoy; sin límite = al final), y ante empate `compararPorPrioridad`. Antes el primer nivel era "accionable", que mandaba toda bloqueada detrás de toda tarea libre, incluso las libres sin fecha límite. Ahora una **bloqueada con fecha límite** se agenda entre su tarea previa y las tareas sin fecha límite (previa → bloqueada → libres). La usan `asignarTareasSinFecha`, `reprogramarVencidas`, `adelantarTareasSiHayHuecoMejor` y `reordenarSugeridasPorPrioridad` (que además ya no considera "invertidos" a los pares de una misma cadena). `compararPorPrioridad` no cambia (Resumen, Tareas y "↺ Prioridad" siguen igual).
+
+### Agregado
+
+- **Plantillas de cadenas** (`assets/js/plantillas.js`, colección nueva `plantillas`, botón "📋 Plantillas" en Tareas): un procedimiento típico guardado como grupo de tareas encadenadas. Se crea desde la tarjeta de cualquier tarea encadenada ("📋 Guardar cadena como plantilla", copia los atributos de toda la cadena) o desde cero con el editor de pasos (nombre, duración, descripción, "días antes" de la fecha límite final, orden). **Usar** una plantilla pide solo la categoría, la fecha límite final y (opcional) "habilitada desde": crea todas las tareas ya enlazadas, con la fecha límite de cada una escalonada, las agenda y deja un único paso de deshacer. Se sincroniza con Drive como el resto.
+
+## [v0.98.0] - 2026-10-01
+
+El agendado automático asignaba horarios encima de eventos "Ocupado" de Google Calendar.
+
+### Corregido
+
+- **Se asignaba sin mirar Calendar cuando no había sesión de Google** (el permiso vive solo en memoria y vence con cada recarga o a la hora, así que al abrir la app casi siempre faltaba): el código agendaba igual "solo con el tope de minutos". La v0.97.0 lo empeoró: el reordenado re-planificaba todas las tareas a ciegas. Ahora **ningún proceso que asigna o mueve horarios corre sin una lectura confiable de Calendar** (`leerEventosParaAgendar`): ni el agendado de tareas sin hora, ni el de vencidas, urgentes, "inmediata", reubicar, adelantar ni el reordenado. La tarea queda sin hora hasta reconectar y se agenda sola al reconectar (o en el próximo refresco de 5 minutos).
+- **Un evento solo bloqueaba el día en que empezaba**: uno que cruza la medianoche o dura varios días no bloqueaba los días siguientes. Ahora cuenta en todos los días que ocupa (`eventosQueTocanElDia`).
+- **Si fallaba la lectura de un calendario (o de la red) se agendaba igual, sin esos eventos**: ahora no se agenda y la cabecera avisa qué calendario no se pudo leer.
+- **`adelantarTareasSiHayHuecoMejor` podía adelantar una tarea encima de otra** que todavía no había revisado en esa pasada.
+- **El reordenado por prioridad (v0.97.0) se revertía entero si una sola tarea no encontraba hueco** (por ejemplo, una cuya sugerida ya superaba su límite) y la corrección nunca se aplicaba: ahora esa tarea queda fija como obstáculo y se reordena el resto.
+
+### Agregado
+
+- Aviso en la cabecera: sin sesión de Google (hasta reconectar no se asignan horarios nuevos) y cuando no se puede leer un calendario.
+
+## [v0.97.0] - 2026-10-01
+
+Las fechas sugeridas ya asignadas ahora se reordenan según la prioridad.
+
+### Corregido
+
+- **Tareas con fecha límite cercana agendadas después de otras con límite lejano o sin límite** (visible al ordenar la Tabla por "Sugerida"): el agendado automático solo decidía al asignar el hueco — una tarea nueva entraba detrás de las ya agendadas, y los datos guardados antes de la v0.96.0 conservaban el orden viejo, sin que nada volviera a mirarlo. Nueva `reordenarSugeridasPorPrioridad` (`assets/js/programador.js`): si una tarea de mayor prioridad (aún no empezada) tiene horario posterior al de otra de menor prioridad, re-planifica esas tareas con el algoritmo de siempre (Calendar, tope diario, días hábiles, fecha límite, fecha habilitada, cadenas). Transaccional (si alguna no encuentra hueco, deja todo como estaba) e idempotente. Corre dentro de `programarTareasSinFecha` (inicio de sesión, refresco de Calendar, alta, "Revisar mi día", "Completar carga", Metas IA) y ahora también al guardar la edición individual o masiva de tareas, para que cambiarle la fecha límite o la urgencia a una tarea ya agendada la reordene al toque.
+
+## [v0.96.0] - 2026-10-01
+
+La reprogramación automática no respetaba la prioridad real al repartir huecos; de paso, eliminar varias tareas de una.
+
+### Corregido
+
+- **`programarTareasSinFecha` y `reprogramarVencidas`** (`assets/js/programador.js`) ahora ordenan las tareas por prioridad (`compararPorPrioridad`) antes de repartirles huecos — antes, si dos competían por el mismo hueco, ganaba la que apareciera primero en la lista interna, no la de fecha límite más urgente. Reproducido y confirmado: una tarea sin fecha límite se quedaba con un hueco más temprano que otra con fecha límite ese mismo día.
+- **`adelantarTareasSiHayHuecoMejor`**: su `.sort(compararPorPrioridad)` le faltaba el parámetro `categorias`, así que tiraba una excepción apenas dos tareas empataban en fecha efectiva (ej. ambas sin fecha límite, un caso muy común) — la atrapaba el `catch` genérico de `refrescarCalendar` (`app.js`), lo que además podía impedir que se persistieran cambios reales de `reubicarTareasSolapadas`/`programarTareasSinFecha` hechos en la misma pasada.
+
+### Agregado
+
+- **Eliminar tareas en bloque** (Tareas, Tabla, Gantt): tras "☑️ Seleccionar", nuevo botón "🗑️ Eliminar N" junto a "✏️ Editar tareas seleccionadas".
+
+## [v0.95.0] - 2026-10-01
+
+Corrige el mismo bug de la v0.90.0 ("una tarea nueva no se agenda hasta el próximo refresco"), que se había pasado en otros 4 caminos de creación/completado de tareas.
+
+### Corregido
+
+- **"Revisar mi día" (altas de continuidad), "Completar carga de tareas" y "Sugerir tareas con IA" de Metas** ahora llaman a `programarTareasSinFecha` antes de persistir, igual que el alta normal desde la v0.90.0 — antes, una tarea creada o completada por estos caminos quedaba sin `tarea_fecha_sugerida` real hasta el próximo refresco automático (inicio de sesión, sync o refresco de Calendar).
+- **"Completar carga de tareas"**: si la tarea se marca `tarea_urgente` ahí mismo, ahora se agenda para hoy (antes solo lo hacía `abrirEdicionTarea`).
+
+## [v0.94.0] - 2026-10-01
+
+Resumen: ajustes finales de Urgentes/Vencidas y "Revisar mi día".
+
+### Cambiado
+
+- **"Revisar mi día" deja de repasar tareas una por una** (Cumplida/No cumplida/Saltar) y pasa directo a la parte de Google Calendar: lee los eventos reales del día elegido para detectar tareas de continuidad. El repaso tarea por tarea ya lo cubren de sobra Resumen (botones directos en cada tarjeta) y Agenda (modal de detalle, v0.93.0); acá generaba confusión con lo que de verdad hace falta mirar al cerrar el día.
+- **Resumen: "Urgentes" sin tareas** muestra el mismo mensaje festivo que ya usaba "Vencidas" ("No tenés tareas con fecha límite hoy 🎉", antes sin el emoji).
+
+### Confirmado sin cambios
+
+- El destacado del atajo elegido en el panel de reprogramar de "Revisar mi día" ya funcionaba igual que en Agenda → Posponer (comparten el mismo componente desde la v0.76.0).
+
+## [v0.93.0] - 2026-09-30
+
+Agenda: detalle de tarea con "Cumplida" y orden de cadenas.
+
+### Agregado
+
+- **Agenda: detalle de tarea al doble clic**, igual que Resumen: modal de solo lectura con "✏️ Editar" y, novedad de esta ronda, "✅ Cumplida" (Agenda no tenía antes ninguna forma de marcar una tarea cumplida, solo "⏭️ Posponer"). `abrirDetalleTarea` se generalizó de `views/resumen.view.js` a `assets/js/modal-tarea.js` para poder reusarla en ambas vistas.
+- **Agenda: las tareas encadenadas dentro de un mismo día respetan el orden de la cadena** (`ordenarConCadenas`, ya usada en Tareas/Tabla) en vez de aparecer salteadas por prioridad pura.
+
+## [v0.92.0] - 2026-09-30
+
+Dos bugs de reprogramación automática reportados por el usuario, ambos ya anotados en el backlog.
+
+### Corregido
+
+- **Dos tareas ya no pueden quedar con la misma `tarea_fecha_sugerida`**: `programarParaHoy`, `reprogramarTareaInmediataSiVencio` y `reubicarTareasSolapadas` solo miraban Google Calendar al buscar un hueco, nunca las tareas de STDL ya agendadas — el caso más visible era `reasignarUrgentesAHoy` (v0.90.0) asignando el mismo horario a varias tareas urgentes seguidas, de las cuales Semana solo mostraba una.
+- **Las tareas vencidas ahora se reprograman a un hueco real** (Calendar + capacidad diaria) en vez de saltar directo al próximo día hábil conservando la misma hora sin mirar si ese día (u otro anterior) tenía lugar de verdad: nueva `reprogramarVencidas` (`assets/js/programador.js`), que reemplaza a `reprogramarFechasSugeridasVencidas`/`calcularProximaFechaSugerida` (`tareas-logica.js`, sin acceso a Calendar).
+
+## [v0.91.0] - 2026-09-30
+
+Seis ajustes chicos de Personas, elegidos tras repasar el backlog.
+
+### Agregado
+
+- **Etiqueta compartida para Personas**: nueva entidad "Etiqueta" (nombre + color), reusable entre varias personas — se crea y edita desde un desplegable "＋ Crear nueva etiqueta…" en el formulario de Persona, sin necesitar una pestaña nueva.
+- **Personas: "☑️ Seleccionar"** para cargar "último contacto" en bloque — selector de fecha (precargado en hoy) con atajos "Hoy"/"Ayer" y "Aplicar a N".
+- **Personas: booleano "💀 Fallecida"** — la tarjeta se atenúa y la persona cae siempre al final de la lista, sin importar hace cuánto no hay contacto.
+- **Personas: validación de "Último contacto"** — ya no se puede cargar una fecha futura.
+
+### Cambiado
+
+- **Personas: "Hace X tiempo"** pasa a meses de calendario reales cuando corresponde ("Hace 1 mes y 14 días", antes siempre en días sueltos).
+- Confirmado que "Personas" ya ordenaba con los contactos más antiguos arriba (backlog); no hizo falta ningún cambio ahí.
+
+## [v0.90.0] - 2026-09-30
+
+Se repensó de fondo la lógica de prioridad, discutida a fondo con el usuario: la fecha límite más próxima gana siempre (no una banda ancha de días), la categoría solo desempata cuando no hay fecha límite o hay un empate exacto, y una tarea que todavía no se puede empezar nunca le gana a una que sí.
+
+### Cambiado
+
+- **Prioridad de tareas, rediseñada**: se sacaron las bandas anchas de holgura (0-3 días, 4-7, etc.) del criterio de orden — la holgura queda como texto informativo ("Quedan N días"), sin influir en el orden. Nuevo criterio: **accionable** (¿ya se puede empezar?) primero, después la **fecha efectiva de orden** (`tarea_fecha_limite` si existe; si no, el día de `tarea_fecha_sugerida` cuando la tarea es `tarea_urgente`, siempre "hoy"; si no, sin apuro), después categoría raíz y directa. Ver `REGLAS_DE_PRIORIDAD.md` para el flujograma completo.
+- **Prioridad manual (Versus/▲▼)** pasa a ser el desempate final para **cualquier** empate (antes solo aplicaba a tareas sin fecha límite) — ya no hay FIFO (`tarea_creada_en` ya no desempata).
+- **Avisos y carteles con categoría antes del nombre** (`«Categoría Nombre»`, antes `«Nombre» (Categoría)`): el aviso de reprogramación al iniciar sesión, y los carteles "¿Tarea de seguimiento?" y "¿Guardar en Calendar?" de Resumen (antes no mostraban categoría).
+
+### Agregado
+
+- **Una tarea `tarea_urgente` recupera `tarea_fecha_sugerida = hoy` todos los días** mientras siga pendiente y sin completar (antes solo se agendaba una vez, al marcarla urgente).
+- **`tarea_fecha_inicio_habilitada` vencida se actualiza sola a hoy** al iniciar sesión (antes solo se tenía en cuenta para el cálculo, la fecha vieja seguía mostrándose en el formulario y en Gantt).
+
+### Corregido
+
+- **Crear una tarea nueva sin fecha sugerida** (y sin marcarla urgente) quedaba sin `tarea_fecha_sugerida` hasta el próximo refresco de sesión o de Calendar — ahora se agenda de una al guardarla.
+
+## [v0.89.0] - 2026-09-29
+
+La fecha sugerida de una tarea ya nunca queda después de su fecha límite por un corrimiento automático.
+
+### Corregido
+
+- **Cascada de reprogramación**: cuando una tarea encadenada se corría en cascada (por vencida, por un choque de Calendar, por marcarse urgente, o por liberarse un hueco mejor) y eso dejaba a un dependiente después de **su propia** fecha límite, antes solo se avisaba una vez al iniciar sesión sin corregir nada. Ahora se le busca un hueco real antes de su límite, respetando que siga después del fin de su propia previa; si de verdad no hay ninguno, la tarea queda visible de forma persistente en la nueva sección de Resumen (ver abajo) en vez de en un aviso que se puede perder. La revalidación de cadena (v0.84.0) ahora también cubre las tareas reprogramadas por vencidas (antes solo cubría 4 de los 5 caminos automáticos).
+- **"🕒 Al próximo hueco libre"** (Resumen, cuando una tarea choca con un evento de Calendar): buscaba en todo el horizonte configurado sin techo en la fecha límite, pudiendo asignar de un clic una fecha inválida. Ahora respeta el límite igual que el resto de la reprogramación automática.
+
+### Agregado
+
+- **Resumen: nueva sección "⚠️ Sin hueco antes del límite"**, arriba de "Urgentes": muestra, siempre visible, cualquier tarea activa cuya fecha sugerida haya quedado después de su fecha límite (por ejemplo, por falta de disponibilidad real en Calendar), para poder reprogramarla a mano, cambiar el límite o eliminarla.
+
+## [v0.88.0] - 2026-09-27
+
+Cuatro ajustes chicos e independientes, elegidos tras repasar el backlog acumulado.
+
+### Cambiado
+
+- **Atajos: Enter y Ctrl+Enter intercambiados** en los diálogos de alta/edición: Enter dispara ahora la acción principal (Guardar/Agregar), Ctrl+Enter la secundaria (Eliminar/Agregar y cargar otra) — antes era al revés, por una limitación del envío nativo del navegador. En los diálogos de un solo botón (categorías, ubicaciones, metas, personas) no cambia nada.
+- **Tabla abre ordenada por Holgura ascendente** por defecto, en vez del orden de prioridad general (que sigue disponible con "↺ Prioridad"). La columna Holgura ahora también muestra las horas restantes (ej. "Quedan 2 días 5h"), no solo los días.
+- **Configuraciones → "Eventos de Calendar que cuentan como ocupados"**: los tres interruptores pasan de una afirmación ("Ignorar los eventos de todo el día") a una pregunta cerrada con el sentido invertido ("¿Un evento de todo el día cuenta como ocupado al buscar hueco libre?"), más fácil de entender de un vistazo. El campo interno guardado no cambia de nombre ni de sentido.
+
+### Agregado
+
+- **Personas**: cuando ya pasó el día de "Próximo contacto" sin que se haya actualizado a mano, se pasa solo a "Último contacto" y "Próximo" queda vacío — corrección silenciosa al iniciar sesión, sin `alert()`.
+
+## [v0.87.0] - 2026-09-27
+
+Gantt suma selección múltiple y edición masiva, como ya existía en Tareas y Tabla.
+
+### Agregado
+
+- **Gantt: "☑️ Seleccionar"** en los filtros: tilda tareas (casilla junto al nombre, no las completadas) y "✏️ Editar tareas seleccionadas" abre el mismo diálogo de edición masiva de Tareas/Tabla, para aplicar un cambio a todas de una vez. Mientras dura el modo selección, se ocultan "📌 Fijar" y las flechas ▲▼ de reordenar (no tienen sentido eligiendo en bloque, y la columna de nombres es angosta).
+
+## [v0.86.0] - 2026-09-27
+
+Semana, Gantt y Tabla dejan de estar acotadas a 860px de ancho: en un monitor ancho aprovechan todo el espacio disponible en vez de dejar dos franjas vacías a los costados. El resto de las vistas (Resumen, Tareas, etc.) sigue con la columna angosta de siempre.
+
+### Corregido
+
+- **Semana**, **Gantt** y **Tabla** ya eran fluidas por dentro (columnas `1fr`, ancho de día calculado del contenedor, tabla al 100%) pero quedaban encerradas en el límite de ancho general de la app. Ahora esas tres vistas no tienen tope de ancho.
+
+## [v0.85.0] - 2026-09-27
+
+Ronda de pulido de la vista Resumen (y dos ajustes iguales en Agenda).
+
+### Agregado
+
+- **Contador de tareas** junto al título de "🚨 Urgentes", "📌 Hoy" y "🌅 Mañana" (mismo criterio que ya usan "Vencidas"/"Resto"/etc.: cuenta accionables + bloqueadas de solo lectura mostradas ahí).
+- **"🧭 Próximos por categoría"** se reposiciona antes de "🌅 Mañana" y pasa a mostrarse siempre que tenga contenido (antes solo aparecía si no había nada en Vencidas/Urgentes/Hoy).
+
+### Cambiado
+
+- **"🌅 Mañana"** pasa a estar plegada por defecto (mismo patrón que "Vencidas"/"Resto de tus pendientes").
+- **Se saca el filtro "📍 ¿Dónde estás?"** de Resumen y de Agenda (sigue disponible en Tareas). El módulo `assets/js/ubicacion-actual.js` no se tocó.
+
+## [v0.84.0] - 2026-09-27
+
+Al reprogramar una tarea automáticamente, sus dependientes en cadena ahora también se revalidan contra Calendar y contra el resto de las tareas — antes solo se les sumaba el mismo corrimiento de tiempo que a la cabeza, sin chequear nada.
+
+### Corregido
+
+- **Un dependiente podía quedar solapado con un evento de Calendar, o con otra tarea de una cadena distinta**, tras el corrimiento en cascada de la tarea de la que depende. Ahora, si el corrimiento lo deja chocando (o antes de que su propia previa termine), se le busca un hueco real más adelante — la cadena marca orden, no una separación exacta, así que romperla puntualmente para evitar un choque es lo esperado.
+
+## [v0.83.0] - 2026-09-27
+
+La vista Semana mostraba siempre de 07:00 a 23:00, sin importar la franja horaria configurada en Configuraciones → 🗓️ Agenda y Calendar. Ahora es reactiva a esa franja.
+
+### Corregido
+
+- **Semana: horario visible fijo (07:00-23:00)**: las tareas con horario fuera de ese rango (por ejemplo de madrugada o de noche) existían y estaban bien agendadas, pero no se veían en la grilla, dando la sensación de que faltaban tareas respecto a la carga indicada del día. Ahora la grilla muestra el rango configurado en "🗓️ Agenda y Calendar" (desde/hasta), sea cual sea — incluida una franja que no arranca en una hora en punto.
+
+## [v0.82.0] - 2026-09-27
+
+`reubicarTareasSolapadas` (la que reubica sola una tarea cuando choca con un evento nuevo de Calendar) ahora arrastra en cascada a sus dependientes, en vez de mover solo la tarea que chocaba.
+
+### Corregido
+
+- Al reubicar una tarea que chocaba con un evento de Calendar, la tarea siguiente en su cadena de dependencias no se corría con ella (quedaba en su horario viejo, potencialmente antes de que terminara la que la bloqueaba). Era la única de las cuatro funciones de reprogramación automática que no usaba `reprogramarTareaConCascada` — un caso suelto de antes de que existiera esa utilidad (v0.76.0), nunca actualizado.
+
+## [v0.81.0] - 2026-09-27
+
+Las tareas "proyectadas" (línea punteada, fondo transparente en Semana — sin `tarea_fecha_sugerida`, o con fecha cargada pero sin hora) ahora también se revisan contra Google Calendar en cada refresco, no solo al iniciar sesión.
+
+### Agregado
+
+- `programarTareasSinFecha` ahora también asigna hora a las tareas que ya tienen una fecha sugerida sin hora (antes solo a las que no tenían ninguna), sin adelantarlas antes de esa fecha, y corre en cada refresco de Calendar (sincronizar, volver a la pestaña, cada 5 minutos), no solo al iniciar.
+- **Cadenas de tareas sin hora**: si varias tareas encadenadas no tienen hora, se agendan según el orden de la cadena y la duración real de cada una (una detrás de la otra, el mismo día si entran), en vez de forzar un salto de un día completo por cada eslabón.
+
+## [v0.80.0] - 2026-09-26
+
+La app vuelve a reaccionar a los cambios de Google Calendar mientras sigue abierta, no solo al iniciar sesión: al sincronizar, volver a la pestaña o cada 5 minutos, refresca la lectura de Calendar en la vista que estés mirando (antes solo redibujaba en Resumen) y reintenta acomodar mejor las tareas ya programadas si se liberó un hueco más temprano.
+
+### Agregado
+
+- **Reprogramación oportunista**: si un evento de Calendar se mueve o se borra y deja un hueco más temprano que el que ya tenía asignada una tarea, la tarea se adelanta sola (respetando su fecha límite, su fecha de habilitación y el fin de su tarea previa en la cadena). Antes solo se reubicaba una tarea si su horario chocaba con un evento nuevo.
+
+### Corregido
+
+- **"🔄 Sincronizar ahora" no actualizaba la lectura de Calendar fuera de la vista Resumen**: invalidaba la caché de eventos pero solo forzaba el redibujado si estabas mirando Resumen; en Semana, Agenda o Gantt seguías viendo los eventos viejos hasta navegar a otra pestaña o recargar la página. Ahora se redibuja la vista que corresponda, sea cual sea.
+- La reubicación y la nueva reprogramación oportunista ahora también corren al sincronizar a mano, al volver a la pestaña y cada 5 minutos mientras la app sigue abierta — antes solo se ejecutaban una vez, al iniciar sesión.
+
+## [v0.79.0] - 2026-09-26
+
+Clima en la vista Semana: ícono de pronóstico por día, amanecer/atardecer y degradé de temperatura/lluvia, sobre una ubicación de referencia elegida en Configuraciones.
+
+### Agregado
+
+- **Configuraciones → 🌦️ Clima**: nueva preferencia "Ubicación para el clima" (desplegable con tus ubicaciones + "＋ Crear nueva ubicación…"), guardada en tu Drive. Es la que usa la vista Semana para el pronóstico; sin ubicación, o sin coordenadas cargadas, las funciones de clima no muestran nada.
+- **Semana: ícono de pronóstico por día** en el encabezado de cada columna (☀️🌤️☁️🌫️🌧️❄️⛈️ según el código de tiempo de Open-Meteo).
+- **Semana: marcas de amanecer y atardecer**, con el interruptor "🌅 Sol" (apagado por defecto).
+- **Semana: degradé de fondo por hora** con la temperatura o la probabilidad de lluvia, elegible con un selector "Ninguno · 🌡️ Temperatura · 🌧️ Lluvia" (ninguno por defecto).
+
+### Corregido
+
+- Al eliminar una ubicación que era la elegida para el clima, la preferencia vuelve a quedar sin ubicación (antes quedaba apuntando a una ubicación que ya no existía).
+
+## [v0.78.0] - 2026-09-26
+
+"Hoy" se renombra a "Resumen" y se reorganiza en secciones más finas (Vencidas siempre visible, nueva "Hoy" y nueva "Mañana"), con una tanda de ajustes de esa vista y de "Revisar mi día".
+
+### Agregado
+
+- **Vista "Hoy" renombrada a "📊 Resumen"** (`#/hoy` sigue funcionando, redirige sola). "🔴 Vencidas" ahora se ve siempre (plegada, con un mensaje si está vacía); "🚨 Urgentes" se acota a fecha límite hoy (antes también incluía sugerida hoy); nueva sección "📌 Hoy" (sugerida hoy, sin límite hoy) y nueva "🌅 Mañana" (límite o sugerida mañana); "🧭 Próximos por categoría" se oculta mientras haya algo en Vencidas/Urgentes/Hoy.
+- **Doble clic en una tarjeta** abre un modal de solo lectura con el detalle y un botón "✏️ Editar".
+- **"Revisar mi día"**: antes de empezar, un selector de día (Hoy/Ayer/Anteayer/fecha) elige qué día de Google Calendar se lee al final del repaso (el repaso de tareas en sí no cambia); cada evento listado suma un botón "➕ Crear tarea" que crea una tarea suelta con ese nombre.
+- **"↩️ Reabrir"** en las tarjetas de "Completadas hoy". **"🗑️ Eliminar"** en el panel de "No cumplida". **"✅ Marcar aplicada"** en la nota de mejora de la tarjeta, sin salir de la vista.
+- **Temporizador de cuenta regresiva** ("⏳ Quedan Xh Ym") en las tareas urgentes con hora límite hoy, actualizado cada minuto.
+- **"➕ Tarea de seguimiento"** (al completar una tarea) pasa de un `confirm()` nativo a una ventana propia de la app, con el mismo estilo que "Guardar en Google Calendar".
+- El texto de ayuda de cada vista (Resumen, Categorías, Estadísticas, Personas, Mejoras, Semana, Tabla, Metas, Ubicaciones) pasa de un párrafo siempre visible a un tooltip al pasar el mouse por el título.
+- "✅ Completadas hoy" queda siempre disponible como sección plegable (abierta por defecto); se saca el botón "🎯 Enfoque".
+
+### Corregido
+
+- "No cumplida"/"Cumplida" cambian de orden (No cumplida primero).
+
+## [v0.77.0] - 2026-09-26
+
+Bug: tareas con fecha sugerida hoy se reprogramaban solas para mañana pese a haber tiempo libre en Calendar.
+
+### Corregido
+
+- **Causa**: un evento marcado "Disponible" en Google Calendar se contaba como tiempo ocupado al buscar hueco libre, porque la preferencia "Ignorar los eventos marcados como «Disponible»" traía `No` de fábrica. Ahora el valor por defecto es `Sí` (coincide con lo que "Disponible" significa realmente en Calendar); la preferencia ya guardada del usuario se migró a `Sí`.
+
+## [v0.76.0] - 2026-09-26
+
+Segunda ronda de ajustes tras uso real: la app ya no toca la fecha límite al reprogramar, buscadores que no pierden el foco, y varios ajustes chicos en Hoy, Tabla, Personas, el modal de tarea, Agenda y Semana.
+
+### Agregado
+
+- **Hoy**: la sección "🧭 Próximos por categoría" se oculta mientras haya algo en "🚨 Urgentes"; las bloqueadas con fecha límite vencida/hoy o sugerida hoy ahora aparecen ahí también (de solo lectura), en vez de perderse en "Bloqueadas por otras tareas".
+- **Tarea de seguimiento al completar**: al confirmar una tarea cumplida (Hoy, Tareas, Revisar mi día), se ofrece crear una tarea de seguimiento con los mismos datos, nombre y fechas vacíos.
+- **Buscadores sin perder el foco**: los de Tareas, Tabla y Gantt ya no reinician el cursor en cada letra escrita.
+- **Tabla**: encabezado de columnas fijo al scrollear.
+- **Personas**: doble clic en una tarjeta abre editar; "Próximo contacto" no permite elegir una fecha pasada.
+- **Pestaña "Mejoras"** muestra la cantidad de notas pendientes.
+- **Modal de editar tarea**: botón "🗑️ Eliminar" (pide confirmación).
+- **Posponer (Hoy, Tareas, Agenda, Revisar mi día)**: atajos con nombres de día reales (hoy, mañana, pasado mañana y los 7 próximos días de la semana) y resaltado del elegido.
+- **Semana**: los eventos de Calendar se ven con un color de fondo más vistoso; los bloques de 15 minutos ya no cortan el texto.
+- **Sincronización periódica**: cada verificación con Drive también refresca los eventos de Calendar mostrados.
+- Renombrado en la interfaz: "tarea de mantenimiento" pasa a llamarse "tarea con repetición" (sin cambios en los datos).
+
+### Corregido
+
+- **STDL ya no modifica la fecha límite de nadie al reprogramar en cascada** (antes la desplazaba junto con la sugerida). Si al reprogramar una tarea, alguna dependiente queda con la sugerida después de su propia fecha límite, se avisa por nombre en vez de corregirla sola.
+- **Tareas que el programador automático no pudo agendar** (por ejemplo porque su fecha límite no deja hueco) ahora se avisan al iniciar, en vez de quedar sin sugerida en silencio (podían verse en Gantt con su posición virtual como si algo estuviera roto).
+
+## [v0.75.0] - 2026-09-24
+
+Reordenar tareas encadenadas con ▲▼ y rediseño de la importancia a un booleano "urgente".
+
+### Agregado
+
+- **Reordenar tareas encadenadas con ▲▼**: subir/bajar una tarea que está en relación previa/próxima directa con su vecina ya no se bloquea — la app reordena sola la cadena (ajusta quién bloquea a quién).
+- **Importancia → "❗ Urgente" (Sí/No)**: reemplaza el nivel de importancia de 3 valores (urgente/importante/sin definir) por un interruptor booleano. Marcar una tarea como urgente le asigna la fecha sugerida de hoy (con hora, respetando Calendar); si hoy no hay hueco, se agenda para el próximo hueco libre en vez de quedar sin fecha. Disponible en el alta, la edición, la edición masiva y "Reestructurar prioridades con IA".
+
+### Corregido
+
+- Datos existentes con el nivel de importancia viejo se migran solos: "Urgente" pasa a `true`, cualquier otro valor a `false`.
+
+## [v0.74.0] - 2026-09-24
+
+Ronda de feedback de uso real: 16 ajustes en Hoy, Tareas, Tabla, Categorías, Gantt y la programación automática.
+
+### Agregado
+
+- **Vista Hoy**: nueva sección "🔴 Vencidas" antes de "Urgentes"; "Urgentes" ahora también incluye las tareas con fecha sugerida hoy; "Resto de tus pendientes", "Todavía no pueden empezar" y "Bloqueadas por otras tareas" quedan plegadas por defecto; las tarjetas ya no muestran "Desde" y las fechas cercanas se ven en lenguaje humano ("hoy", "mañana", "pasado mañana", "próximo lunes"...).
+- **Fecha sugerida nunca supera la fecha límite**: se recorta sola (queda sin sugerida, lista para reprogramarse) si se carga o se edita en bloque una combinación que la supera; el programador automático ya no asigna un día más allá del límite.
+- **Reubicación automática por choque con Calendar**: al iniciar, además de reprogramar lo vencido y programar lo nuevo, la app reubica sola cualquier tarea con fecha sugerida que quedó tapada por un evento de Calendar (respetando la fecha límite) y avisa si alguna no tiene hueco libre antes de su límite.
+- **Reprogramación de la tarea inmediata si su ventana venció**: la tarea más próxima por fecha sugerida no se toca mientras "ahora" está dentro de su ventana estimada (sugerida + duración) — evita reprogramar en cascada una tarea que el usuario está haciendo en este momento. Recién si esa ventana vence sin completarse se busca el próximo hueco real y se reprograma; se revisa al iniciar y, mientras la app sigue abierta, cada 1-2 minutos.
+- **Tareas: buscador** por nombre, "Seleccionar todas" en modo selección, tocar una tarjeta la selecciona/deselecciona, y doble clic abre Editar.
+- **Edición masiva ampliada**: ahora también en la vista Tabla (mismo botón "☑️ Seleccionar"), y con tres campos nuevos con hora — Habilitada desde, Fecha sugerida (se recorta sola contra el límite de cada tarea) y Fecha límite.
+- **Tabla**: nueva opción de Estado "🚦 Pendientes y bloqueadas", por defecto.
+- **Categorías**: botón "📋 Ver tareas" en cada tarjeta, filtra Tareas por esa categoría.
+- **Gantt**: cada tarea muestra su categoría junto al nombre.
+
+### Corregido
+
+- **Hoy**: una tarea ya no muestra "Bloqueada por" si la que la bloqueaba ya se completó (el bloqueo real ya se había levantado; solo faltaba que la tarjeta dejara de mostrarlo).
+- **Tareas: descripciones largas** ya no ensanchan la tarjeta ni la pantalla.
+- **Reordenar a mano (▲▼)**: entre tareas empatadas y todavía sin decidir, el intercambio podía saltar por delante de otras tareas del mismo grupo empatado (no solo de la vecina tocada), dando un orden "ilógico" a simple vista. Ahora el intercambio es local: solo cambia el orden relativo del par tocado.
+
+## [v0.73.0] - 2026-09-23
+
+Deshacer / rehacer (Ctrl+Z / Ctrl+Shift+Z).
+
+### Agregado
+
+- **Deshacer y rehacer**: Ctrl+Z (o el botón "↩️" de la cabecera) vuelve al estado de antes de la última acción guardada — crear, editar, completar, eliminar, reprogramar, arrastrar en Gantt/Semana, edición masiva, Configuraciones, básicamente cualquier cambio que se guarda; Ctrl+Shift+Z (o "↪️") rehace. Hasta 20 pasos, solo en memoria (se pierde al recargar la página). Si mientras tanto llega un cambio real de otro dispositivo, el historial se vacía solo (para no "deshacer a través" de ese cambio); las acciones locales nuevas de ahí en más vuelven a ser deshacibles.
+
+## [v0.72.0] - 2026-09-23
+
+Ubicaciones: autocompletar latitud/longitud buscando una dirección.
+
+### Agregado
+
+- **Buscar una dirección o un lugar al cargar una Ubicación**: nuevo campo de búsqueda (Nominatim de OpenStreetMap, gratis y sin clave) que ofrece hasta 5 resultados; tocar uno completa la latitud y la longitud solas. La carga manual (o pegar el par que copia Google Maps) sigue funcionando igual, como alternativa.
+
+## [v0.71.0] - 2026-09-23
+
+Tabla: color de categoría por fila y columnas reordenables.
+
+### Agregado
+
+- **Tabla: color de categoría**: cada fila muestra un borde izquierdo con el color de su categoría, igual que las tarjetas de Tareas.
+- **Tabla: reordenar columnas**: el diálogo "🧱 Columnas" deja subir/bajar cada columna (▲▼) además de elegir cuáles se ven; el orden elegido se guarda junto con la visibilidad.
+
+## [v0.70.0] - 2026-09-23
+
+Selección múltiple y edición masiva en Tareas.
+
+### Agregado
+
+- **Selección múltiple y edición masiva**: "☑️ Seleccionar" en Tareas muestra una casilla en cada tarjeta; con una o más elegidas, "✏️ Editar tareas seleccionadas" abre un formulario donde solo los campos tildados con "Cambiar" (categoría, importancia, disfrute, meta, persona, ubicación, fecha límite, duración, costo estimado, días hábiles) se aplican a todas de una — el resto de cada tarea queda como estaba. Quedan afuera a propósito el nombre/descripción, los enlaces depende-de/bloquea-a (regla 1 a 1) y marcar como completada.
+
+## [v0.69.0] - 2026-09-23
+
+Reordenar tareas a mano con ▲▼, en Tareas, Tabla y Gantt.
+
+### Agregado
+
+- **Reordenar tareas a mano (▲▼)**: en la vista Tareas, en la columna "Orden" de Tabla (con el orden por prioridad activo) y en el Gantt (modo Plan, entre tareas del mismo carril con el mismo día planificado). Reusa `tarea_prioridad_manual` (el mismo campo que ya usaba "Versus"): un nivel de desempate más dentro del algoritmo de prioridad, no anula holgura/categoría/importancia. Cuando mover una tarea no cambiaría nada (porque no está empatada con su vecina en esos niveles, o porque son cadena previa/próxima) el botón queda deshabilitado con el motivo puntual — qué tarea y por qué gana — para saber qué tocar si de verdad se la quiere reordenar.
+
+### Cambiado
+
+- **Versus** ahora usa la misma función interna (`asignarOrdenManual`) que las flechas nuevas, sin cambios de comportamiento.
+
+## [v0.68.0] - 2026-09-23
+
+Ajustes a partir de 4 comentarios de un usuario de prueba (notados desde la v0.66.0).
+
+### Agregado
+
+- **Semana: color real de los eventos de Google Calendar** — cada evento se pinta con fondo tintado usando su color propio (`colorId`, si lo tiene) o, si no, el color de su calendario, en vez del gris plano de antes. Nueva `listarColoresEvento()` en `assets/js/google-calendar.js` (lee `calendar/v3/colors`, cacheada).
+- **Metas**: se explica en la ayuda de arriba de la pestaña que los botones "🤖" arman un prompt para copiar y pegar en un asistente de IA externo; "📋 Copiar prompt" ahora confirma visiblemente ("✅ ¡Copiado!") en vez de no mostrar nada al copiar bien.
+
+### Cambiado
+
+- **Exportar a Calendar**: el evento creado usa el horario que STDL tenía planificado (`tarea_fecha_sugerida` + duración) en vez del momento real en que se completó la tarea; se sacó la línea "Duración: N min" de la descripción.
+- **Tareas**: los botones de la tarjeta (Editar, Duplicar, Crearle previa/posterior, Eliminar, etc.) pasan de una columna vertical a filas que se acomodan solas, para que la tarjeta no se estire en altura de más.
+
+## [v0.67.0] - 2026-09-23
+
+Programación automática de la lista: las tareas activas sin fecha sugerida (y que no son de mantenimiento) pasan a tener un día y una hora reales asignados solos, en vez de solo una posición estimada para dibujar.
+
+### Agregado
+
+- **Programación automática** (`assets/js/programador.js`): al iniciar la app, toda tarea activa sin `tarea_fecha_sugerida` recibe una real, respetando el tope de minutos por día, lo ocupado en Google Calendar (si hay conexión) y el orden de las cadenas de dependencia — cada tarea se programa un día después de su previa, como mínimo. Dentro del día elegido, busca la hora exacta (el primer hueco libre real, sin chocar con Calendar ni con otra tarea de STDL ya asignada). Sin conexión con Calendar, programa igual usando solo el tope de minutos. Se avisa con un `alert()` cuántas tareas se programaron, junto con las que se reprogramaron por vencidas.
+
+### Corregido
+
+- **Gantt**: una cadena de tareas con la misma fecha límite y sin fecha sugerida ahora se reparte en días distintos (antes se apilaba toda en la fecha límite, porque cada una se estimaba "un día después de la previa" sin mirar la capacidad real). Con fecha real asignada, `calcularPosiciones` las toma directamente como barras reales, ya no punteadas.
+- **Semana**: por el mismo motivo, una cadena así ya no se ve amontonada toda en el día de la fecha límite.
+
+## [v0.66.1] - 2026-09-22
+
+Ajustes chicos y corrección de bugs detectados usando la app con datos reales.
+
+### Agregado
+
+- **"➡️ Agregar y crearle siguiente"** en el alta de tarea: guarda la tarea actual y abre una nueva en blanco, ya con "Depende de" apuntando a la que se acaba de crear — para cargar una cadena rápido, una detrás de otra.
+- **Pipeta de color** (💧, cuando el navegador la soporta — `EyeDropper` de Chrome/Edge) en el selector de color de categorías, además del dado.
+- Ícono de la pestaña **Agenda** cambiado a 📖.
+
+### Cambiado
+
+- Una tarea nueva que queda **bloqueada** y no tiene una "fecha desde" propia hereda la de su tarea previa (antes quedaba en la fecha de creación, como si no tuviera ninguna restricción).
+
+### Corregido
+
+- El selector de color (categorías) disparaba "¿Descartar cambios?" al tocar el dado o la pipeta: el popover se dibuja con `position: fixed`, así que un clic dentro de él podía caer fuera del rectángulo visual del diálogo aunque siguiera siendo parte de su contenido. `dialogo-formulario.js` ahora mide "clic afuera" por **contención en el DOM**, no por coordenadas.
+- Al abrir "Duplicar" o "Crearle tarea previa/posterior" y escribir (o pegar) un nombre que coincidía con otra tarea existente, la app pisaba la categoría (y otros campos) ya precargados desde la tarea de origen, porque los tomaba por "sin tocar". Esa precarga por nombre ahora se desactiva cuando el formulario ya se abrió con datos propios.
+
+### Documentación
+
+- `LOGICA_FUNCIONES.md`, `BACKLOG.md`.
+
+## [v0.66.0] - 2026-09-22
+
+Tercera ronda con datos reales: asociación Tarea↔Persona (ver `CHANGELOG.md` v0.64.0 y v0.65.0).
+
+### Agregado
+
+- **Campo "👤 Persona"** en el formulario de tarea (una sola por tarea, junto a "🏁 Meta"), con "＋ Crear nueva persona…" igual que categoría/ubicación/meta. Se muestra en la tarjeta de Tareas.
+- **Diálogo de Persona ampliado** (reemplaza al anterior): suma **"📅 Próximo contacto"** y, al editar una persona existente, la lista de sus **tareas pendientes asociadas** (con un ✏️ para editar cada una sin salir del diálogo). Al guardar con un "Próximo contacto" nuevo, se reprograma la fecha sugerida de todas esas tareas pendientes a esa fecha (en cascada sobre lo que dependa de ellas) y se avisa cuántas se movieron.
+- **Filtro por persona y columna opcional "Persona"** en Tabla.
+
+### Documentación
+
+- `DICCIONARIO_DE_DATOS.md`, `LOGICA_FUNCIONES.md`, `CASOS_DE_USO.md` (C3), `BACKLOG.md`.
+
+## [v0.65.0] - 2026-09-22
+
+Segunda ronda con datos reales: rediseño de la vista Semana (ver `CHANGELOG.md` v0.64.0). La v0.66.0 sigue con la asociación Tarea↔Persona.
+
+### Agregado
+
+- **Semana: selector de días** (1 · 3 · 7 · 8 · 15, como el de Agenda; abre en 8 por defecto) y navegación ‹ › que ahora avanza sin techo hacia adelante (antes, en escritorio, no había forma de mirar la semana siguiente).
+- **Línea de "ahora"**, como en Google Calendar: una línea roja en la columna de hoy, a la altura de la hora actual, que se mueve solita.
+- **Tareas bloqueadas visibles en Semana**: antes solo se veían si tenían una hora fija; ahora también aparecen proyectadas (atenuadas, con 🔒), y una cadena pendiente→bloqueada se ve junta (reusa `ordenarConCadenas` de la v0.64.0).
+
+### Cambiado
+
+- El ancho de cada columna de Semana ya no salta por el tamaño de pantalla (antes achicaba a 3 o 4 días en celular sin importar lo elegido): siempre se estira para llenar el ancho disponible, para la cantidad de días que elijas.
+
+### Documentación
+
+- `LOGICA_FUNCIONES.md`.
+
+## [v0.64.0] - 2026-09-22
+
+Primera ronda de ajustes con datos reales: el usuario empezó a cargar categorías y tareas propias y anotó 21 fricciones y bugs al usar la app. Esta versión resuelve los más rápidos; el rediseño de Semana (v0.65.0) y la asociación Tarea↔Persona (v0.66.0) quedan para las próximas dos.
+
+### Agregado
+
+- **Botón flotante "＋"** en Categorías, Ubicaciones, Metas, Tareas y Personas: siempre visible, aunque la lista sea larga y haya que scrollear. Reemplaza al botón de la barra de arriba (`assets/js/boton-flotante.js`).
+- **Categorías**: **"➕ Agregar categoría hija"** en cada tarjeta (abre el alta con el padre ya elegido); el color de una categoría nueva **hereda el del padre** elegido (se puede cambiar después; deja de heredar en cuanto se aplica un color a mano); **expandir/colapsar** una rama (expandido por defecto).
+- **Selector de color propio** para categorías (`assets/js/selector-color.js`): reemplaza al selector nativo del navegador por uno con área de saturación/tono, campo de hex, un dado 🎲 que sortea un color, y **Aplicar/Cancelar** (lo que al nativo le faltaba).
+- **Tareas**: en cada tarjeta, **"📄 Duplicar"** (abre el alta con los mismos datos, sin enlaces, para cargar una tarea parecida) y **"⬅️ Crearle tarea previa"** / **"➡️ Crearle tarea posterior"** (abren el alta con los mismos datos pero nombre y descripción vacíos, y el enlace correspondiente ya elegido — funciona también para insertar en medio de una cadena existente).
+- **Tema claro/oscuro** pasa de la cabecera a Configuraciones → 🎨 Apariencia, como un interruptor.
+
+### Cambiado
+
+- **Tope de minutos por día**: el valor por defecto pasa de 180 a **1440** (un día entero), así no hay restricción hasta que cada quien ajuste el suyo; el campo no acepta menos de 0 ni más de 1440.
+- **Orden de los botones de una ventana**: en toda la app, **Cancelar queda a la izquierda y la acción principal a la derecha** (antes era al revés).
+- **Gantt**: "Agrupar por" abre por defecto en **"Nada"** (antes, "Categoría").
+- **Tareas y Tabla**: una tarea **bloqueada** aparece **justo debajo de su tarea previa**, no separada de las pendientes ni dispersa por prioridad individual — una cadena se ve junta, en el orden en que se va a poder hacer.
+- Los desplegables "Depende de"/"Bloquea a" muestran **"Categoría · Tarea"** (antes era al revés).
+- Calendar en la vista Semana respeta el interruptor **"Ignorar los eventos marcados como «Disponible»"** (antes solo se aplicaba al cálculo de capacidad, no a lo que se mostraba).
+
+### Corregido
+
+- **"Vence hoy"** aparecía en una tarea que en realidad vencía **mañana**, cuando la fecha límite tenía una hora ya pasada del día de hoy.
+- En el alta de tarea, **"Agregar y cargar otra"** no ofrecía la tarea recién creada en "Depende de"/"Bloquea a" de la siguiente (había que cerrar y volver a abrir la ventana).
+
+### Documentación
+
+- `LOGICA_FUNCIONES.md`, `PROCESOS_AUTOMATICOS.md` (26).
+
+## [v0.63.0] - 2026-09-21
+
+Limpieza antes de cargar datos reales. El usuario decidió empezar a usar la app con sus datos reales (se borran los de prueba) y suspender lo específico de examen, que era una propuesta que no sirve para algo general. Las plantillas van a volver como un ABM general de cadenas de tareas (ver `BACKLOG.md`).
+
+### Eliminado
+
+- **📚 Nuevo examen** (el asistente con instancias, unidades y ciclos), la **plantilla base de examen** que vivía en el código, el **"¿otro ciclo?"** al cumplir, el **enlace de RemNote** y el **"Elegir de Calendar"** del asistente. Módulos `plantillas.js`, `asistente-examen.js`, `editor-plantillas.js` y `post-cumplir.js`.
+- **La colección `plantillas`** y su sección "📋 Plantillas de preparación" de Configuraciones: ningún dato de plantilla se guarda hasta que exista el ABM nuevo. Un archivo de Drive que aún la traiga se lee igual; simplemente se ignora.
+- **"Tipo: Examen"** del formulario de tarea y la oferta de armar la preparación al guardarlo. Los campos `tarea_tipo` y `tarea_origen` quedan en el modelo sin uso (decisión del usuario), y editar una tarea que los tenga no los borra.
+- **"Día previo a un examen"** (Configuraciones y capacidad): dependía del tipo examen. `pref_dia_previo_factor` ya no se usa.
+
+### Se mantiene
+
+- **Hábito temporal** ("Repetir hasta" una fecha o hasta que se cumpla o venza otra tarea), **preferencias en Drive**, **capacidad por día**, **eventos de Calendar en Semana** y la **barra de carga**.
+
+### Cambiado
+
+- Al cumplir una tarea se vuelve a ofrecer solo exportarla a Calendar.
+- `sw.js`: `CACHE_NAME` a `v23` y sin los módulos eliminados.
+
+### Documentación
+
+- `REDISENO.md` (9a retirada y hoja de ruta nueva), `BACKLOG.md` (ABM de plantillas de cadena y lo que queda sin efecto), `CASOS_DE_USO.md`, `DICCIONARIO_DE_DATOS.md`, `LOGICA_FUNCIONES.md` y `PROCESOS_AUTOMATICOS.md`.
+
+## [v0.62.0] - 2026-09-21
+
+Ronda 9b del rediseño: tiempo disponible (ver `REDISENO.md`, punto 9). La **9c** (v0.63.0) suma el reparto entre exámenes, el recálculo automático con aviso y el Gantt por minutos.
+
+### Agregado
+
+- **Preferencias en Drive** (nueva colección, un único registro que se sincroniza entre dispositivos): tope de minutos por día de la semana (180 por defecto), franja horaria, factor del día previo a un examen, calendarios que se leen, interruptores de eventos que se ignoran, horizonte de lectura y capacidad de fechas puntuales. La franja horaria que estaba solo en el dispositivo se migra sola.
+- **Configuraciones → ⏱️ Tiempo disponible**: el tope por día, **🌙 día previo a un examen** (100 · 75 · 50 · 25 % del tope, 50 % por defecto), **📆 leer Calendar hasta** (30 · 60 · 90 · 180 días; antes eran 15 fijos), interruptores para ignorar los eventos de **todo el día** (sí), los **rechazados** (sí) y los marcados como **«Disponible»** (no), y la lista de **calendarios** que se leen (todos por defecto).
+- **Semana**: tus **eventos de Google Calendar** en gris, de solo lectura (clic los abre en Calendar; se reparten en carriles si se pisan), una franja con los de **todo el día** y, debajo de cada día, una **barra de carga** "planificado/disponible" en minutos, roja si hay más tareas que tiempo. Tocar la barra abre una ventana para fijar la **capacidad de esa fecha** (vacío = automático, 0 = ningún tiempo).
+- **Capacidad** (`assets/js/capacidad.js`): la consulta común de cuánto tiempo hay disponible cada día y cuánto lleva comprometido: `min(tope, tiempo libre de la franja según Calendar)`, el día previo a un examen reducido, y hoy sin lo que ya pasó.
+- **Asistente de examen**: los días se llenan hasta lo que queda disponible (se saltan los días sin tiempo), el campo pasa a **"⏱️ Minutos por día para este examen"** (vacío = automático; un número es el tope de ese examen) y cada instancia ofrece **"📅 Elegir de Calendar"** con los eventos que dicen «examen» para cargar su fecha y hora.
+- **Versión del archivo de Drive**: el formato pasa a 3. Si Drive tiene un archivo guardado por una versión más nueva, la app queda en **solo lectura** con un aviso en lugar de pisarlo.
+
+### Cambiado
+
+- Calendar se lee de **todos los calendarios** (antes solo el principal). Los eventos rechazados ya no cuentan como ocupados (se puede volver a contarlos), y los de todo el día pueden contarse si se apaga el interruptor. La superposición y el próximo hueco libre usan las mismas reglas.
+- El horizonte de lectura de Calendar por defecto pasa de 15 a **90 días**.
+- Los cambios de Configuraciones se guardan sin redibujar la vista (`persistirYNotificar({ sinNotificar: true })`).
+- `sw.js`: `CACHE_NAME` a `v22` y precache de `preferencias.js` y `capacidad.js`.
+
+### Corregido
+
+- En el asistente de examen, **"↩️ Volver"** desde la vista previa borraba lo cargado (nombre, minutos, fechas…); ahora se conserva.
+
+### Documentación
+
+- `REDISENO.md`, `CASOS_DE_USO.md` (A10, D3), `DICCIONARIO_DE_DATOS.md` (Preferencias, formato 3), `LOGICA_FUNCIONES.md`, `PROCESOS_AUTOMATICOS.md` (24 y 25) y `BACKLOG.md`.
+
+## [v0.61.0] - 2026-09-21
+
+Ronda 9a del rediseño: hábito temporal y plantilla de examen (ver `REDISENO.md`, punto 9). La **9b** (minutos disponibles leídos de Calendar, carga por día y reparto entre exámenes) queda para la v0.62.0.
+
+### Agregado
+
+- **Hábito temporal**: en 🔁 Repetición de una tarea de mantenimiento, **"⏳ Repetir hasta"** (una fecha) y **"🎓 …o hasta que se cumpla o venza esta tarea"** (por ejemplo el examen). Al llegar el fin no se crea otra copia (la del último día sí). Si se mueve la fecha de la tarea de referencia, el hábito se acorta o se alarga solo. En Hábitos, el que terminó figura **"✔ terminado"** y los días posteriores quedan como "no aplica".
+- **Tipo de tarea "🎓 Examen"** en 📝 Qué. Al guardar una tarea de tipo examen (nueva, o una existente que pasa a serlo) se ofrece armar la preparación con el asistente, usando esa tarea como el examen.
+- **📚 Nuevo examen** (botón en Tareas): asistente con el nombre, la categoría y la importancia, la plantilla, las **instancias** del examen (por ejemplo práctica y después teórica, con fecha y hora opcional), las **unidades** del temario de cada una, los **ciclos** de práctica (automático = los que entren, o un número), los minutos de estudio por día (120 por defecto), el día en que se empieza, los días de estudio y un enlace opcional de RemNote. Una **vista previa editable** (renombrar, cambiar la duración, subir, bajar y quitar tareas; las fechas se recalculan solas) muestra los avisos si no alcanza el tiempo y el hábito diario; **"✅ Crear"** genera todo de una vez.
+- **La preparación es una cadena de un solo hilo** en el orden de las fechas: preparar (una vez) → por unidad leer, resumir y crear las tarjetas → ciclos de práctica (practicar, autoevaluar, diagnosticar, corregir) → simulacro, errores frecuentes y día previo → 🎓 "Rendir …" de cada instancia → retrospectiva. Las fechas se planifican **hacia adelante** (empezar cuanto antes) y lo que sobra hasta el examen se llena con ciclos, espaciados entre sí. Cada tarea es atómica: dura como máximo 60 minutos (salvo el simulacro) y trae su **"Hecho cuando…"** en la descripción. Hereda la categoría y la importancia del examen y tiene como fecha límite la del examen. Solo la primera queda pendiente; las demás se habilitan a medida que se cumplen.
+- **Hábito diario de repaso** de las tarjetas (RemNote), habilitado el día siguiente a las primeras tarjetas y que termina en el último examen.
+- **¿Otro ciclo?** Al cumplir el último "corregir" del último ciclo de una instancia, la app pregunta si hace falta otro y, si se acepta, inserta los cuatro pasos a continuación y corre lo que sigue (avisa si quedaría después del examen). Funciona desde Hoy, Tareas, Revisar mi día y la edición (`post-cumplir.js`).
+- **Plantillas de preparación** (nueva entidad, se sincroniza con Drive): en Configuraciones, la plantilla por defecto (solo se puede duplicar) y las propias (**Editar**, **Duplicar**, **Eliminar**, **Nueva plantilla vacía**). El editor permite agregar, quitar y reordenar pasos con su fase, duración y "Hecho cuando…", los días antes del examen (consolidar) y el paso después del cual empieza el hábito.
+
+### Cambiado
+
+- `Tarea` suma `tarea_tipo`, `tarea_repetir_hasta`, `tarea_repetir_hasta_tarea` y `tarea_origen`; el archivo de Drive suma la colección `plantillas` (los datos viejos se completan solos al leerlos). `esTareaSoloConNombre` no cuenta como "cargada rápido" una tarea de tipo examen ni una generada por el asistente.
+- `sw.js`: `CACHE_NAME` a `v21` y precache de los módulos nuevos.
+
+### Documentación
+
+- `REDISENO.md` (Ronda 9a hecha, con las decisiones y la plantilla validada; la 9b sigue abierta), `CASOS_DE_USO.md` (B3, preparar un examen), `DICCIONARIO_DE_DATOS.md`, `LOGICA_FUNCIONES.md`, `PROCESOS_AUTOMATICOS.md` (22 y 23) y `BACKLOG.md`.
+
+## [v0.60.0] - 2026-09-21
+
+Ronda 8b del rediseño: atajos de teclado, tooltips y tareas chicas del backlog (ver `REDISENO.md`, punto 8). También se documenta la definición de la Ronda 9 y la hoja de ruta a la v1.0.0.
+
+### Agregado
+
+- **Atajos de teclado** (teclas solas, con el cursor fuera de un campo y sin ninguna ventana abierta): **1…9 y 0** abren las diez primeras pestañas en su orden, **N** abre la nueva tarea, **F** lleva el cursor al buscador o al primer filtro de la vista y **?** (o el botón **⌨️** de la cabecera) abre una ventana con la lista de atajos. `assets/js/atajos.js`.
+- **Ctrl+Enter** en cualquier ventana de formulario: guarda o agrega con el botón principal.
+- **Tooltips**: un `title` con explicación en pestañas (con su tecla, por ejemplo "Hoy (tecla 1)"), botones de acción, filtros, buscadores, solapas de Estadísticas y campos del formulario (cada fecha explica qué significa).
+- **Íconos PNG de la aplicación** (192, 512 y una versión maskable de 512, más el de Apple), declarados en el manifiesto y precacheados: al instalarla en Windows (Brave, Chrome, Edge) se ve el logo en lugar de una "S" gris. En Windows hay que desinstalar la app y volver a instalarla para que tome el ícono nuevo.
+- **`TECNOLOGIAS.md`**: todas las tecnologías usadas, qué hace cada una y dónde.
+
+### Cambiado
+
+- **Nuevo orden de las pestañas** para los atajos: Hoy · Agenda · Semana · Gantt · Tabla · Categorías · Ubicaciones · Metas · Tareas · **Estadísticas** · Mejoras · Personas · Configuraciones.
+- **La duración por defecto de una tarea nueva es de 30 minutos** (antes 15). Las tareas ya cargadas no cambian, y "Completar carga de tareas" sigue considerando "sin datos" tanto la duración de 30 como la de 15.
+- `manifest.json`: ícono SVG más los PNG; `sw.js`: `CACHE_NAME` a `v20`.
+
+### Documentación
+
+- `REDISENO.md`: nueva sección **Ronda 9** (hábito temporal con "Repetir hasta", plantilla de examen con cadena y repaso diario, ciclos y vista previa editable, con el borrador del proceso de estudio y lo que queda abierto) y la **hoja de ruta a la v1.0.0**: no se cargan datos reales hasta entonces, y la v1.0.0 debe incluir seguimiento de uso, solicitud de acceso y feedback.
+
+## [v0.59.0] - 2026-09-21
+
+Ronda 8a del rediseño: sistema visual y formulario (ver `REDISENO.md`, punto 8). Los atajos de teclado quedan para la 8b (v0.60.0).
+
+### Agregado
+
+- **Botones por tipo de acción**, un color para cada uno y pensado primero para el tema oscuro: confirmar/crear **azul**, cumplir **verde**, posponer **ámbar**, eliminar **rojo**, integración externa (Calendar, Drive, IA) **violeta** y neutral **gris**. En cada contexto hay un solo botón relleno (el principal); los demás llevan fondo tenue y borde de su color. El texto de cada tipo tiene un contraste de al menos 4,5 : 1 en oscuro y en claro.
+- **Emojis en todo**: pestañas, títulos de vistas y secciones, botones y títulos de campos, escritos directo en cada texto.
+- **Interruptores Sí/No** en lugar de casillas en "Requiere buen tiempo", "Es tarea de mantenimiento" y "Agrupar por categoría" (Tareas), y **fichas L M X J V S D** para los días hábiles (la semana empieza el lunes). El checklist y las listas de selección siguen con casillas.
+- **Formulario de tarea en cinco secciones con título**: 📝 Qué · 📅 Cuándo · 📍 Dónde y costo · 🔗 Enlaces · 🔁 Repetición; todos los campos con título y emoji, más grandes (una columna en celular, dos en pantalla ancha).
+- **Botón "🧹 Limpiar campos"** en el alta (pide confirmación y deja el formulario vacío, sin aviso de descartar al cancelar).
+- **Interruptor "✅ Completada"** en la ventana de edición: cumple la tarea (con la nota de mejora opcional si es de mantenimiento, la copia de mantenimiento y la oferta de exportar a Calendar) o la reabre, con la misma lógica que el desplegable de estado de la vista Tareas; queda deshabilitado en una tarea bloqueada.
+- La frase **"Lo que no se mide no se mejora"** como cita destacada en la solapa Hábitos.
+- Foco visible con teclado en botones, campos e interruptores; en pantallas táctiles, botones y campos de al menos 2,5 rem de alto.
+
+### Cambiado
+
+- **El tema oscuro es el de por defecto**: sin una elección guardada la app se abre en oscuro aunque el sistema esté en claro; el botón de tema sigue eligiendo y se recuerda. El color de la barra del navegador (`theme-color`) y del manifiesto acompañan el tema.
+- El texto de los elementos activos sobre el color primario (pestañas, selectores) usa un color propio con buen contraste (antes era blanco sobre un azul claro).
+- `sw.js`: `CACHE_NAME` a `v19`.
+
+## [v0.58.0] - 2026-09-20
+
+Ronda 7 del rediseño: el Gantt con todas las tareas (ver `REDISENO.md`, B2).
+
+### Agregado
+
+- **Todas las tareas en el Gantt** (antes solo las que tenían meta), con **filtros** por categoría (incluye subcategorías), meta, estado (por defecto pendientes y bloqueadas) y búsqueda por nombre, y un selector **"Agrupar por"** (categoría principal, meta o nada; cada grupo es un carril con su separador).
+- **Interruptor Plan | Ventana**: en *Plan* cada barra es el día sugerido de la tarea, con una bandera ⚑ en su fecha límite (roja si venció o si el día plan cae después); en *Ventana* la barra es el margen (holgura) entre la fecha habilitada —o hoy— y el límite, con un rombo ◆ en el día plan y rayas rojas si ya venció.
+- **Posición estimada para las tareas sin fecha** (barra punteada): se calcula al dibujar y **no se guarda**. Las tareas sin fecha y sin previa hacen una cola por prioridad dentro de su carril, una por día desde hoy (no antes de su fecha habilitada, si la cargaste); las que tienen previa van el día siguiente al de su previa. Se guarda como fecha sugerida solo al arrastrarla o con el botón **📌** de su fila. Nunca se usa la fecha de creación. `assets/js/gantt-modelo.js`.
+- **Cadenas con flechas** entre la previa y la próxima (roja si la próxima queda antes que su previa) y **flecha punteada de cierre de anillo** (desde el desencadenante).
+- **Escala de 2 · 4 · 12 semanas** con desplazamiento, línea vertical de hoy, botón "Hoy", cabecera de fechas y columna de nombres fijas; el modo, la escala y la agrupación se recuerdan en el dispositivo; en celular arranca en 2 semanas.
+- **Arrastrar**: en Plan se mueve la barra (cambia `tarea_fecha_sugerida`, conserva la hora, desplaza en cascada las tareas encadenadas detrás y, si la tarea queda antes de su previa, la guarda igual y avisa); en Ventana los bordes cambian la fecha habilitada y el límite. Un clic sin arrastrar abre la edición de la tarea.
+
+### Cambiado
+
+- La fecha de inicio habilitada solo cuenta como fecha real si es distinta de la fecha de creación (por defecto valen lo mismo), igual que ya hacía "Completar carga de tareas".
+- `sw.js`: `CACHE_NAME` a `v18` y precache con `assets/js/gantt-modelo.js`.
+
+### Eliminado
+
+- El Gantt por meta (selector de meta y mensajes que pedían crear metas): la meta pasa a ser un filtro y una forma de agrupar.
+
+## [v0.57.0] - 2026-09-20
+
+Ronda 6 del rediseño: hábitos, progreso por categoría y Mejoras (ver `REDISENO.md`).
+
+### Agregado
+
+- **Estadísticas con solapas internas**: Resumen (lo de siempre) · Progreso por categoría · Hábitos.
+- **Solapa "Hábitos"**: matriz con un hábito (tarea de mantenimiento) por fila y un día por columna, con período de 7 · 30 · 90 días (recuerda la elección; arranca en 30). Cada celda lleva color y símbolo: ✓ cumplido, ✗ incumplido (día hábil sin hacer en un hábito diario, o vencimiento que se cumplió tarde o sigue vencido), ▫ pendiente hoy, · no aplica. Junto a cada hábito, la **racha** 🔥 y el **porcentaje** de cumplimiento del período (solo sobre los días que tocaban). Debajo, la **actividad por categoría** (un día cuenta si se cumplió alguna tarea de la categoría o de sus subcategorías). En celular la matriz se desplaza hacia el costado y arranca mostrando los últimos días. `assets/js/habitos.js`.
+- **Solapa "Progreso por categoría"**: una tarjeta por categoría principal, sumando sus subcategorías, con completadas de total (barra), tareas vencidas y el tiempo a la próxima fecha límite, a la próxima fecha sugerida y a la última fecha límite; un desplegable muestra lo mismo por cada subcategoría. `assets/js/progreso-categorias.js`.
+- **Vista "Mejoras"** (nueva solapa, después de Tareas): las notas de "¿qué podrías mejorar la próxima vez?", agrupadas por tarea y con filtro Pendientes / Aplicadas / Todas. Se pueden **marcar como aplicadas**, **editar** y **eliminar**.
+- **"💡 Mejora pendiente"** en la tarjeta de Hoy de una tarea de mantenimiento (hasta 2 notas, las más recientes).
+- **Renombrar una tarea de mantenimiento actualiza su historial**: los cumplimientos y las mejoras con el nombre viejo pasan al nuevo y la ventana avisa cuántos registros se actualizaron; el hábito no se parte en dos. `renombrarHistorial`.
+
+### Cambiado
+
+- Modelo: cada **cumplimiento** guarda además `cumplimiento_intervalo` y `cumplimiento_dias_habiles` (los de la tarea al cumplirla), y cada **mejora** suma `mejora_aplicada` (por defecto `false`). Los registros anteriores se completan con `null` / `[]` / `false` al cargarlos; no hace falta migrar nada.
+- `sw.js`: `CACHE_NAME` a `v17` y precache con los cinco archivos nuevos.
+
+## [v0.56.1] - 2026-09-20
+
+Ajuste de fechas y horas para usar la app en Argentina: todo se calcula en la hora local del dispositivo.
+
+### Corregido
+
+- **El día de un horario ya no se corre entre las 21:00 y las 24:00.** Las fechas con hora se guardan en UTC y la app sacaba "el día" cortando ese texto, por lo que de noche una tarea caía en el día siguiente. Ahora el día de cada instante se toma en hora local (`fechaLocalISO`, `diaLocal`), lo que arregla: "vence hoy" y vencidas (Urgentes), las columnas de Agenda y Semana, las barras de Gantt, las semanas de Estadísticas, la fecha de referencia del pronóstico, los atajos "Hoy" y "Mañana" del panel de reprogramar, el reprogramado automático de fechas vencidas y el nombre del archivo exportado.
+- **Tareas de mantenimiento**: completar una a la noche (por ejemplo a las 22:00) ya no agenda la próxima repetición un día tarde.
+
+### Cambiado
+
+- **Horas en 24 h en todas las pantallas** (`16:30` en lugar de `04:30 p. m.`): hora de un evento de Calendar en Hoy, hora de completada y eventos de "Revisar mi día" (`formatearHora`).
+- `hoyISO()` devuelve el día local (antes el día UTC). Los datos ya guardados no se migran: un instante sigue siendo un instante y un día sigue siendo un día.
+- `sw.js`: `CACHE_NAME` a `v16`.
+
+## [v0.56.0] - 2026-09-20
+
+Ronda 4 del rediseño: la vista Hoy (ver `REDISENO.md`, A1).
+
+### Agregado
+
+- **"Completadas hoy"** al final de Hoy: las tareas completadas en el día (hora local), apagadas y con el botón **"📅 Exportar a Calendar"** por tarea (queda "📅 Exportada" y el botón pasa a "Exportar de nuevo").
+- **Botón "🎯 Enfoque"** en Hoy (apagado por defecto, se recuerda en el dispositivo): encendido oculta las completadas de hoy.
+- **Aviso "☀️ Buen clima previsto (N% de lluvia)"** en las tareas que piden buen clima cuando el pronóstico acompaña (hasta 50% de lluvia).
+- **"Posponer" y "Al próximo hueco libre"** junto al aviso "📅 Se superpone con…". El segundo mueve la tarea al primer momento sin choques con ningún evento de Calendar: busca desde la hora sugerida en adelante (no se limita a hoy: mira los próximos 15 días), en días hábiles de la tarea y dentro de una franja horaria elegible; si no hay hueco, avisa y abre el panel de fecha. `buscarHuecoLibre` (`assets/js/google-calendar.js`).
+- **Franja horaria configurable** en Configuraciones ("Agenda y Calendar": desde/hasta cada 30 minutos, por defecto 00:00 a 24:00; se guarda en el dispositivo). `assets/js/preferencias-horario.js`.
+- **Checklist tildable desde Hoy**, en las tareas de mantenimiento (componente compartido `assets/js/checklist-tarjeta.js`, que ahora usa también la vista Tareas).
+- Los avisos de superposición ahora también marcan **tareas de los próximos días** (la lectura de Calendar pasó de "solo hoy" a un rango de 15 días, `obtenerEventos(desde, hasta)`, con paginación).
+
+### Cambiado
+
+- **"Elegí por categoría" pasa a "Próximos por categoría"** y va **antes** de "Resto de tus pendientes", con el camino de la categoría en la etiqueta (por ejemplo "Facultad / IR"). "Resto" ya no repite esas tareas y no aparece si no queda nada.
+- **Los avisos de Calendar se actualizan solos**: "Sincronizar ahora" y volver a la pestaña olvidan los eventos guardados y redibujan Hoy (sin ventanas ni paneles abiertos ni texto a medio escribir). Antes podían tardar hasta 5 minutos en reflejar un cambio hecho en Calendar.
+- Las tarjetas de un mismo dibujo comparten una sola consulta a Calendar (antes cada tarjeta con horario pedía la suya al llegar la primera respuesta).
+- `sw.js`: `CACHE_NAME` a `v15` y precache con los dos módulos nuevos.
+
+## [v0.55.0] - 2026-09-20
+
+Ronda de diseño: pestañas, vista Tareas y estadísticas (pedidos surgidos de la validación de la Ronda 5; ver `REDISENO.md`).
+
+### Agregado
+
+- **Nueva tarea en ventana modal**: el botón "＋ Nueva tarea" de la vista Tareas, el "＋" de la cabecera y la tecla N abren la misma ventana **encima de la vista actual**, sin ir a Tareas. **Enter agrega la tarea y deja la ventana abierta, vacía y con el cursor en el nombre** ("Agregar y cargar otra") para cargar varias seguidas; el botón "Agregar" agrega y cierra. Si el pedido de enlaces es contradictorio no se crea la tarea ni se limpia el formulario. `abrirAltaTarea` (`assets/js/modal-tarea.js`); el diálogo genérico admite varios botones de guardado.
+- **Vista "Agenda"**: unifica "3 días" y "8 días" con un selector de **3 · 8 · 15 días** que recuerda la última elección.
+- **Vista Tabla con todas las columnas** y un botón **"Columnas"** para elegir cuáles ver (por defecto: nombre, categoría, importancia, estado, fecha y holgura; además disfrute, habilitada desde, sugerida, límite, duración, costo, ubicación, meta, mantenimiento, días hábiles, depende de, bloquea a, creada y completada el). La categoría muestra su cadena completa (Facultad / IR / Prácticos). Se puede ordenar por cualquier columna visible y la tabla se desplaza hacia el costado dentro de su recuadro (no la página).
+- **Semana en celular**: 3 días por vez (4 desde 480 px) con flechas ‹ ›; en compu se ven los 7 ajustados al ancho.
+- **Tarjetas de Tareas**: el borde izquierdo lleva el color de la categoría; las vencidas muestran una etiqueta roja "⚠️ Vencida" y un fondo rojizo suave (en lugar del borde rojo).
+
+### Cambiado
+
+- **Nuevo orden de las pestañas**: Hoy · Agenda · Semana · Gantt · Tabla · Estadísticas · Categorías · Ubicaciones · Metas · Tareas · Personas · Configuraciones. Los enlaces viejos (`#/tres-dias`, `#/ocho-dias`, `#/informes`, `#/todas`) siguen llevando a su vista.
+- **"Informes" pasa a llamarse "Estadísticas"** (ahí irá después el tracking de hábitos). El **throughput semanal** ahora muestra las 2 últimas semanas ya completadas (barras sólidas) y las **6 próximas semanas planificadas** (barras rayadas, por fecha sugerida o límite), con leyenda y fechas cortas (dd/mm).
+- **La vista Tareas** sigue la plantilla de Categorías: botón "＋ Nueva tarea" arriba y el listado debajo (se quitó el formulario en línea). Las tareas se ordenan **pendientes → bloqueadas → completadas** (dentro de cada grupo, por prioridad) y las completadas quedan **plegadas** en un desplegable "Completadas (N)" al final, que recuerda si estaba abierto y se muestra abierto con el filtro Estado = Completada.
+- El "＋" de la cabecera y la tecla N ya no navegan a Tareas; se ignoran si ya hay una ventana abierta.
+- `sw.js`: `CACHE_NAME` a `v14` y precache actualizado.
+
+### Eliminado
+
+- Las vistas `views/tres-dias.view.js` y `views/ocho-dias.view.js` (reemplazadas por `views/agenda.view.js`) y el formulario de alta en línea de la vista Tareas.
+
+## [v0.54.1] - 2026-09-20
+
+Ajustes surgidos de la validación manual de la Ronda 5.
+
+### Corregido
+
+- **"Abrir en Google Calendar" no abría nada al aceptar**: el `confirm()` del navegador vence el permiso para abrir pestañas nuevas y el navegador bloqueaba la ventana. Ahora es una ventana de la propia página ("Abrir en Calendar" / "Cancelar"): el clic es un gesto del usuario y la pestaña se abre. Si el navegador igual la bloquea, avisa cómo permitirla y no marca la tarea como exportada.
+- **La precarga por nombre pisaba lo que ya habías cargado**: al escribir en el alta un nombre que ya existía (por ejemplo al borrar y reescribirlo), se reemplazaban la categoría, la descripción y demás campos. Ahora la precarga solo completa los campos que siguen como estaban (o que ella misma había completado antes) y nunca pisa lo que el usuario cargó.
+- **Celular**: los filtros de la vista Tareas y el gráfico de Throughput semanal de Informes obligaban a desplazar la página hacia la derecha; ahora se acomodan al ancho de la pantalla.
+
+### Cambiado
+
+- **La primera letra del nombre de una categoría, ubicación, meta o persona queda en mayúscula** (como ya pasaba con las tareas): se corrige al escribir (`activarMayusculaInicial`) y en las funciones de creación.
+- **Nueva categoría / Editar categoría**: el orden de los campos ahora es nombre, categoría padre, color, disfrute y descripción.
+- **Al editar, el cursor del primer campo de texto queda al final** (antes al principio) en todas las ventanas.
+- Al no haber campos (por ejemplo la ventana de Calendar), el foco va al botón principal.
+- "Borrar todos los datos": si se escribe una palabra distinta de BORRAR, dice "Palabra incorrecta. No se borró nada."
+
+### Agregado
+
+- Las tarjetas de la vista Tareas muestran también la **meta** de la tarea ("🏁 …"), junto a la ubicación.
+
+## [v0.54.0] - 2026-09-19
+
+Ronda 5 del rediseño: **ABMs y Configuraciones** (ver `REDISENO.md`, C1/C2/C3). Se hizo antes que la Ronda 4 (Hoy) para poder pulir la creación de categorías, ubicaciones y metas antes de cargar datos reales.
+
+### Agregado
+
+- **Editar categorías, ubicaciones, metas y personas** (antes solo se podían crear o eliminar): botón "Editar" en cada tarjeta. En categorías se puede cambiar cualquier campo, **incluido el padre**: el desplegable no ofrece la propia categoría ni sus descendientes (evita ciclos) y, al cambiar de padre, queda al final de sus nuevas hermanas; las tareas conservan su categoría al renombrarla o moverla. En personas, "Editar" cubre el último contacto.
+- **Crear con botón "＋ Nueva …" y ventana modal** en las cuatro vistas (se quitaron los formularios en línea): la misma ventana sirve para crear y para editar.
+- **Crear categoría, ubicación o meta desde el formulario de la tarea**: los desplegables suman "＋ Crear nueva…"; al guardarla, la nueva queda seleccionada y lo que ya se había escrito en la tarea no se pierde. Funciona en el alta, en la ventana de edición y en "Completar carga" (se puede abrir una ventana encima de otra).
+- **Ubicaciones**: ayuda sobre el formato de las coordenadas (grados decimales, sur y oeste negativos, lo que usa el pronóstico del clima), validación de rangos y, si se pega el par "lat, lon" que copia Google Maps en Latitud, se reparte solo entre latitud y longitud.
+- **Vista "Configuraciones"** (última de la navegación): Exportar JSON, Importar JSON (con confirmación; salen de la cabecera) y **"Borrar todos los datos"** con doble confirmación (aviso y escribir BORRAR): vacía las siete colecciones, también en Drive y en los otros dispositivos.
+- **Aviso de anillo de mantenimiento incompleto**: al guardar una tarea de mantenimiento con desencadenante, si hay tareas de su cadena que no son de mantenimiento (y por eso no se repetirían), la app lo avisa y ofrece marcarlas con el mismo intervalo; nada cambia sin confirmar (`tareasDeLaCadenaNoRepetibles`).
+- `assets/js/dialogo-formulario.js` (diálogo genérico con confirmación de descarte), `assets/js/formularios-entidades.js`, `views/configuraciones.view.js`, `descendientesDeCategoria` (`assets/js/utilidades.js`) y `borrarTodosLosDatos` (`assets/js/almacenamiento.js`).
+
+### Cambiado
+
+- `modal-tarea.js` usa el diálogo genérico (mismo comportamiento) y el diálogo se limpia al cerrar sin depender del evento `close`.
+- El texto de Metas ya no habla de un botón "Metas" que no existe.
+- `sw.js`: `CACHE_NAME` a `v13` y precache de los módulos nuevos.
+
+### Eliminado
+
+- Los formularios en línea de alta de categoría, ubicación, meta y persona, y los botones Exportar/Importar JSON de la cabecera.
+
+## [v0.53.2] - 2026-09-19
+
+### Cambiado
+
+- **La vista "Todas" pasa a llamarse "Tabla"** (pedido del usuario, para dejar claro que es la vista de tabla, ya que el Gantt también mostrará todas las tareas): `views/todas.view.js` → `views/tabla.view.js`, ruta `#/tabla`. Los enlaces o marcadores viejos a `#/todas` siguen funcionando (alias).
+
+### Eliminado
+
+- La sección **"Enfoque 80/20 (Pareto)"** de Informes y la función `calcularEnfoque8020` (junto con sus estilos), a pedido del usuario. La etiqueta "🎯 Foco 80/20" ya se había sacado de Hoy y de Tareas en v0.53.1. Queda en el backlog para analizar si conviene incorporarla en el futuro.
+
+## [v0.53.1] - 2026-09-19
+
+Ajustes surgidos de la validación manual de las Rondas 2 y 3.
+
+### Agregado
+
+- **Las tarjetas de la vista Tareas muestran los enlaces sin entrar a editar**: "⛓️ Bloqueada por: …", "⬅️ Depende de: …" y "➡️ Bloquea a: …" (los nombres llevan la categoría, porque dos tareas distintas pueden llamarse igual).
+- **La categoría acompaña al nombre en los desplegables** de tarea previa, tarea próxima y desencadenante ("Revisar · Casa" / "Revisar · Trabajo").
+
+### Cambiado
+
+- **La primera letra del nombre de una tarea siempre queda en mayúscula**: se corrige mientras se escribe (sin mover el cursor) y también al crear o guardar (`capitalizarPrimera`, en `crearTarea` y en el formulario).
+- **"Posponer" ya no aparece en las tareas completadas** (no tiene sentido posponer algo que ya se hizo).
+- **Ventana de edición en celular**: ocupa toda la pantalla (`100dvh`), los campos se apilan a lo ancho y los botones Guardar/Cancelar quedan fijos abajo, porque en el celular quedaba cortada. Pendiente de validar en un celular real.
+
+### Eliminado
+
+- La etiqueta **"🎯 Foco 80/20"** de las tarjetas de Hoy y de Tareas (pedido del usuario; queda anotado en el backlog para analizar su uso, su automatización y una implementación futura). La función `calcularEnfoque8020` y la sección "Enfoque 80/20" de Informes se mantienen por ahora.
+
+## [v0.53.0] - 2026-09-19
+
+Ronda 3 del rediseño: **carga de tareas** (ver `REDISENO.md`, A2, A3 y "Cabecera y navegación").
+
+### Agregado
+
+- **Alta unificada**: un solo formulario con **un solo campo de nombre** (se acabó el cartel "Completa este campo" del segundo formulario). Con solo el nombre + Enter crea una tarea rápida; con más campos, la completa. Todos los campos son opcionales y visibles debajo, e incluyen ahora **meta**, **"depende de (tarea previa)" y "bloquea a (tarea próxima)"** (regla 1 a 1: si se elige una tarea ya enlazada se inserta en medio; si el pedido es contradictorio se rechaza explicando el conflicto y **no se crea la tarea ni se limpia el formulario**), **desencadenante** y **checklist** (para tareas de mantenimiento).
+- **Botón "＋" fijo en la cabecera** (mismo efecto que el atajo "N": va a Tareas y enfoca el nombre); no aparece en la pantalla inicial ni en una pestaña de solo lectura.
+- **"📝 Completar carga de tareas (X)"** en la cabecera, solo si X > 0: ventana con las tareas que quedaron solo con nombre, cada una con su formulario y los botones "Actualizar" y **"Dejar así"** (nuevo campo `tarea_carga_completa`, sincronizado con Drive).
+- **Ventana modal de edición** (`assets/js/modal-tarea.js`): editar una tarea ya no mezcla el formulario de alta en la misma pantalla. Se abre desde Tareas, Todas, Gantt y Semana **sin cambiar de vista**. Esc o clic afuera preguntan "¿Descartar los cambios?" solo si hay cambios sin guardar; si la tarea se eliminó o cambió en otro dispositivo mientras estaba abierta, avisa (y pide confirmar antes de pisar los cambios ajenos).
+- **Checklist**: se edita en el formulario (agregar y quitar pasos) y se tilda en la tarjeta de la vista Tareas.
+- `assets/js/formulario-tarea.js`: formulario compartido (reemplaza las tres copias que había en `views/tareas.view.js`); `esTareaSoloConNombre`/`tareasSoloConNombre` en `assets/js/tareas-logica.js`.
+
+### Cambiado
+
+- La fila de cada tarea queda con **un solo "Editar"** (más Posponer y Eliminar): Dependencia y Meta pasan a ser campos del formulario y se eliminan sus paneles.
+- El formulario de alta **conserva lo escrito** ante cualquier redibujado (acciones locales, filtros y cambios de otro dispositivo) y se limpia solo al agregar; `assets/js/borradores.js` gana el modo `soloEn` para no cambiar el comportamiento de los formularios de otras vistas.
+- `sw.js`: `CACHE_NAME` a `v12` y precache de los módulos nuevos.
+
+### Corregido
+
+- Los campos de mantenimiento ("cada N días…", desencadenante, checklist) se mostraban siempre, aunque "Es tarea de mantenimiento" no estuviera marcado: el atributo `hidden` perdía contra el estilo `inline-flex`.
+
+### Eliminado
+
+- Los formularios `#form-alta-rapida` y `#form-nueva-tarea`, los paneles Dependencia, Meta y Editar de la fila, y `abrirEdicionAlEntrar` (Todas, Gantt y Semana abren la ventana de edición directamente).
+
+## [v0.52.1] - 2026-09-19
+
+### Corregido
+
+- **La copia de una tarea de mantenimiento ahora hereda todos los atributos de la original** (pedido del usuario): además de nombre, categoría, duración, descripción, intervalo, costo, disfrute, desencadenante y checklist, la copia conserva `tarea_importancia`, `ubicacion_id`, `tarea_dias_habiles`, `tarea_requiere_clima_bueno` y `meta_id`, que antes se perdían al completar la tarea.
+
+## [v0.52.0] - 2026-09-19
+
+Ronda 2 del rediseño: **modelo de datos** (ver `REDISENO.md`). Fija la forma de lo que se guarda antes de cargar datos reales.
+
+### Agregado
+
+- **Tarea**: `tarea_exportada_calendar` (se marca al aceptar abrir la tarea en Calendar), `tarea_checklist` (`[{ texto, hecho }]`, solo tareas de mantenimiento; la copia nace destildada; todavía sin pantalla) y `tarea_desencadenante` (tarea que "activa" a una de mantenimiento: al completarla, su copia nace bloqueada por la instancia vigente del desencadenante, lo que permite sostener anillos A→B→C→D→A).
+- **Entidades nuevas** `Mejora` (nota "¿cómo mejorar la próxima vez?" asociada al **nombre** de la tarea, independiente de las instancias) y `Cumplimiento` (registro liviano por cada tarea completada: nombre, categoría, fecha, vencimiento esperado y si era de mantenimiento; base del mapa de hábitos). Se sincronizan con Drive como el resto (`COLECCIONES`, sellos `*_modificado_en`, eliminados y mezcla). Van en el archivo de Drive y en Exportar JSON.
+- **Dependencias 1 a 1** (`assets/js/dependencias.js`, nuevo): cada tarea bloquea a como máximo una tarea activa y es bloqueada por una (entre categorías distintas también). Elegir una tarea ya enlazada **inserta en medio** (P→A→N); pedidos contradictorios se rechazan explicando el conflicto. El panel "Dependencia" de Tareas ahora tiene "depende de (tarea previa)" y "bloquea a (tarea próxima)"; el panel "Editar" suma el desplegable "Se activa cuando se cumple (desencadenante)".
+- `cumplirTarea`, `reabrirTarea` y `eliminarTarea` (`assets/js/tareas-logica.js`): la lógica de completar ya no está duplicada en Hoy, Tareas y "Revisar mi día". Al reabrir una tarea de mantenimiento se borra su copia si sigue sin tocar (si se modificó, se conserva y se avisa) y se deshace el cumplimiento. Al eliminar una tarea del medio de una cadena, se reconecta (P→N) y el desencadenante que la apuntaba pasa a su previa.
+- **Reparación tras mezclar**: si dos dispositivos enlazan tareas de forma incompatible con la regla 1 a 1 (o forman un ciclo), se conserva el enlace de la tarea más antigua, se sueltan los demás y se deja un aviso.
+
+### Cambiado
+
+- `recalcularBloqueo` y `puedeAgregarDependencia` se movieron a `dependencias.js` (se reexportan desde `tareas-logica.js`).
+- Al arrancar, la base de la mezcla con Drive se normaliza igual que la copia local y la remota, para no generar diferencias falsas por los campos nuevos.
+- `sw.js`: `CACHE_NAME` a `v11` y precache de `dependencias.js`.
+
+### Documentación
+
+- Actualizados `DICCIONARIO_DE_DATOS.md`, `datos/esquema.json`, `LOGICA_FUNCIONES.md`, `PROCESOS_AUTOMATICOS.md` (1, 3, 15, 16), `CASOS_DE_USO.md` (A4), `REDISENO.md`, `BACKLOG.md` y `README.md`. Los datos existentes no se migran ni se reparan: los campos nuevos toman su valor por defecto, y las dependencias viejas que rompan la regla 1 a 1 quedan como están (el usuario recrea sus datos).
+
+## [v0.51.4] - 2026-09-19
+
+### Corregido
+
+- **Se perdía lo que estabas escribiendo cuando llegaban cambios de otro dispositivo** (hallado al validar: el campo "Agregar tarea rápido" quedaba vacío tras aplicar los cambios, tanto al hacer clic fuera como con el botón "Actualizar"). Al aplicar cambios remotos la vista se redibuja entera y vaciaba los formularios a medio completar. Nuevo módulo `assets/js/borradores.js`: antes de redibujar guarda los campos que el usuario ya tocó (y cuál tenía el foco) y los vuelve a poner después. Solo se usa para cambios que vienen de otro dispositivo (`notificar({ conservarBorradores: true })`); los redibujados locales siguen limpiando el formulario, por ejemplo después de agregar una tarea.
+- `sw.js`: `CACHE_NAME` a `v10` y precache de `borradores.js`.
+
+## [v0.51.3] - 2026-09-19
+
+### Cambiado
+
+- **Aviso de reconexión con Google más claro** (pedido del usuario al validar): al abrir la app sin sesión de Google, el navegador bloquea el popup silencioso (no hay ningún clic todavía), pero el primer clic o tecla en cualquier parte de la página reconecta y sincroniza solo. El aviso de la cabecera ahora lo dice: "Falta reconectar con Google: hacé clic en cualquier parte de la página (o en el botón) y se sincroniza solo". Si el reintento por clic ya se usó (o falló), vuelve el texto anterior. Además, el reintento por clic se vuelve a armar cada vez que se pierde la sesión (por ejemplo cuando vence el token a la hora), no solo al abrir la app. Estado nuevo `reconectaConClic` en `obtenerEstadoSync()`.
+
+## [v0.51.2] - 2026-09-19
+
+### Corregido
+
+- **"No se pudo cargar Google Identity Services" al volver la conexión** (hallado al validar v0.51.0): si la página se abría sin internet, el script de Google (`index.html`) fallaba de forma definitiva y "Reconectar Drive" seguía fallando aunque internet volviera, hasta recargar con F5. Ahora `google-auth.js` vuelve a cargar el script por su cuenta (`esperarGoogle` la primera vez espera al original y después lo reintenta; `conectar` lo recarga si falta), así que la reconexión funciona sin recargar.
+
+## [v0.51.1] - 2026-09-19
+
+### Cambiado
+
+- **Botón de tema** de la cabecera: muestra solo el emoji de la acción (☀️ para pasar a modo claro, 🌙 para pasar a modo oscuro) en lugar del texto "Modo claro"/"Modo oscuro", que se leía como el estado actual y no como la acción. La lógica no cambia; se suman `title` y `aria-label` ("Cambiar a modo claro/oscuro") para que el botón siga siendo comprensible.
+
+## [v0.51.0] - 2026-09-19
+
+Ronda 1 del rediseño: **Google Drive como único destino de los datos** (ver `REDISENO.md`, sección Almacenamiento).
+
+### Agregado
+
+- **Sincronización con Google Drive** (`assets/js/almacenamiento.js`, reescrito): buffer local durable en IndexedDB (`pendiente`, se borra solo cuando Drive confirma), copia `cache` de la última versión confirmada (base de la mezcla y copia de solo lectura sin conexión), subida con debounce de 2 s, reintentos si se edita durante la sincronización, verificación automática (al volver a la pestaña, al recuperar red y cada 5 min) y aviso `beforeunload` si hay cambios sin confirmar. La UI nunca muestra "sincronizado" hasta que Drive confirma.
+- **Mezcla entre dispositivos** (`assets/js/sincronizacion.js`, lógica pura): sello `*_modificado_en` por entidad (calculado por diferencia al guardar, sin tocar las vistas), registro de eliminados con retención de 90 días, gana el cambio más reciente de cada entidad y **avisos persistentes** de todo lo descartado (campo y valor), que el usuario cierra a mano. Aviso si Drive tiene archivos duplicados (se usa el más antiguo) y si el reloj del dispositivo está desfasado más de 2 minutos.
+- **Permiso único de Google** (`assets/js/google-auth.js`): Drive (`drive.file`) y Calendar (`calendar.readonly`) se piden juntos en un solo popup; reconexión silenciosa al abrir, con reintento en el primer clic si el navegador bloquea el popup.
+- **Cabecera de sincronización**: estado siempre visible (sincronizado / guardando / pendiente / sin conexión / sesión vencida), hora del último guardado y de la última verificación, botón "Sincronizar ahora", banners de estado y panel de avisos. **Pantalla inicial obligatoria** hasta conectar con Drive. Segunda pestaña abierta en **solo lectura** (Web Locks).
+- Campos `categoria_/ubicacion_/meta_/persona_/tarea_modificado_en` y estructura `formato 2` del archivo de Drive (`colecciones` + `eliminados` + `guardado_en`); los archivos anteriores se migran solos al leerse.
+- Datos viejos de `localStorage` (`super-todo-list:datos`): se importan solos si Drive no tiene archivo; si tiene, se ofrece mezclarlos o descartarlos.
+- `assets/js/almacenamiento-local.js` (IndexedDB v2: `cache`, `pendiente`, `avisos`).
+
+### Cambiado
+
+- "Importar JSON" ahora **pide confirmación** (reemplaza todo, también en Drive).
+- Google Calendar se concede junto con Drive: ya no hay un botón "Conectar con Google Calendar" en Hoy (en "Revisar mi día" queda un botón para reconectar si la sesión venció).
+- `sw.js`: `CACHE_NAME` a `v9` y precache de los módulos nuevos.
+
+### Eliminado
+
+- **Modo carpeta local** (File System Access API, `categorias.json`/`tareas.json`) y **`localStorage` como copia de los datos** (queda solo para preferencias). El store `handles` de IndexedDB se elimina.
+- Botones "Elegir carpeta de datos" y "Sincronizar con Google Drive" de la cabecera y el conflicto por `confirm()` todo-o-nada.
+
+### Documentación
+
+- Actualizados `CASOS_DE_USO.md` (D1-D3), `PROCESOS_AUTOMATICOS.md` (10-13), `LOGICA_FUNCIONES.md`, `DICCIONARIO_DE_DATOS.md`, `datos/esquema.json`, `REDISENO.md`, `SPEC.md`, `README.md`, `AGENTS.md` y `BACKLOG.md`.
+
+### Pendiente de validar en el navegador real
+
+- La reconexión silenciosa de Google al abrir la app (en las pruebas el popup con `prompt: 'none'` fue bloqueado) y publicar la app OAuth "En producción" en Google Cloud Console para evitar la caducidad del consentimiento a los ~7 días.
+
+## [v0.50.0] - 2026-09-19
+
+### Eliminado
+
+- **Sugerencia automática de tarea de alto disfrute (principio de Premack)**: se borró `assets/js/disfrute.js` y sus llamadas en Hoy, Tareas y "Revisar mi día". Se retoma post-v1.0 con datos reales (ver `BACKLOG.md`). `categoria_disfrute` se conserva, solo recolecta datos.
+
+### Agregado
+
+- `tarea_disfrute` (1-5 o `null`, default `null`) en todas las tareas: select "Disfrute" en el alta y la edición, y se copia a la instancia clonada de una tarea de mantenimiento. Por ahora solo recolecta datos, sin efecto en la app.
+
+### Documentación
+
+- Nuevos documentos vivos `CASOS_DE_USO.md` (flujos por objetivo, baseline de cómo funciona hoy) y `PROCESOS_AUTOMATICOS.md` (condición → proceso → resultado de todo lo que el sistema hace solo), registrados en `AGENTS.md`. En `PROCESOS_AUTOMATICOS.md` se marcaron como pendientes de implementar dos pedidos nuevos (aviso ☀️ de clima favorable, botón "Posponer" junto al aviso de solapamiento con Calendar).
+
+## [v0.49.0] - 2026-09-19
+
+### Agregado
+
+- **Reprogramado de fechas vencidas** (Ronda 5, cierra el algoritmo de prioridad): `tarea_fecha_sugerida` vencida de una tarea activa se reprograma sola al iniciar la app (`reprogramarFechasSugeridasVencidas`, `assets/js/tareas-logica.js`) — a la próxima fecha disponible respetando `tarea_dias_habiles` y sin superar `tarea_fecha_limite`, en cascada a dependientes — con un `alert()` de aviso si hubo cambios. `tarea_fecha_limite` nunca se toca sola: en Hoy, cada tarea vencida en "Urgentes" suma un botón "📅 Revalorizar fecha límite" (reusa `crearPanelReprogramar`, sin cascada).
+- `siguienteDiaHabil` (`assets/js/reprogramar.js`) pasa a exportada, para reusarla desde `tareas-logica.js`.
+
+## [v0.48.0] - 2026-09-19
+
+### Agregado
+
+- **Herramienta "Versus"** (Ronda 4 del algoritmo de prioridad), botón "⚔️ Versus" en la vista Todas: agrupa las tareas accionables en clusters mutuamente empatados en prioridad (nuevo `tareasEmpatadas`/`compararEstructural` en `assets/js/tareas-logica.js`, los niveles 1-4 ya existentes de `compararPorPrioridad`) y ofrece pares adyacentes de a uno para que el usuario elija cuál conviene antes, o "Da igual / Omitir". Elegir asigna el nuevo campo `tarea_prioridad_manual` (número \| `null`) a ambas tareas del par vía un contador global creciente; a partir de ahí ya no vuelven a ofrecerse (dejan de estar "empatadas"). Omitir no asigna nada — siguen genuinamente empatadas, solo se evita re-ofrecer el mismo par en la sesión actual.
+- `tarea_prioridad_manual` se suma como **Nivel 5** de `compararPorPrioridad`, entre `tarea_importancia` y el FIFO final (`tarea_creada_en`, que pasa a Nivel 6).
+
+## [v0.47.0] - 2026-09-18
+
+### Cambiado
+
+- **Vista "Todas"** (Ronda 3 del algoritmo de prioridad), rename de la vista "Tabla" (`views/tabla.view.js` → `views/todas.view.js`, ruta `#/todas`): ya no excluye tareas completadas por defecto — se acota con el nuevo filtro de Estado. Se suman filtros de categoría (árbol, inclusivo de descendientes), importancia y un buscador por nombre. El orden por defecto pasa a ser `compararPorPrioridad` (el orden real de prioridad de la app), pensado para auditar de un vistazo si algo quedó mal priorizado; clic en el header de una columna (Nombre/Categoría/Importancia/Estado/Fecha/Holgura) cambia a un orden simple por esa columna con toggle asc/desc, y un botón "↺ Prioridad" vuelve al orden por defecto. Nueva columna "Holgura".
+- `textoHolgura(dias)` (antes lógica duplicada dentro de Hoy) se extrajo a `assets/js/utilidades.js`, compartida entre Hoy y Todas.
+
+## [v0.46.0] - 2026-09-18
+
+### Cambiado
+
+- **Algoritmo real de prioridad** (Ronda 2 del rediseño de datos, `assets/js/tareas-logica.js`), definido en conjunto con el usuario para reflejar su jerarquía real (Facultad como prioridad de vida #1, pero sin que domine siempre el orden). `compararPorPrioridad` pasa de ordenar solo por `categoria_prioridad` a 5 niveles:
+  1. **Banda de holgura**: días de margen hasta `tarea_fecha_limite`, contados desde hoy (`calcularHolguraDias`), agrupados en 6 bandas (vencida, 0-3, 4-7, 8-15, 16-30, 31+/sin fecha) para que una diferencia chica de días no tape la prioridad de categoría.
+  2. `categoria_prioridad` de la categoría **raíz** de la tarea (nueva `categoriaRaiz` en `utilidades.js`, recorre `categoria_padre_id`).
+  3. `categoria_prioridad` de la categoría directa, como desempate entre categorías con la misma raíz.
+  4. `tarea_importancia`.
+  5. `tarea_creada_en` (FIFO), para que el orden sea siempre determinístico.
+- Nueva función `mejorTareaPorCategoria`: para cada categoría raíz, su tarea accionable de mayor prioridad — pensada para elegir qué hacer en un rato libre sin quedar siempre empujado hacia la categoría de mayor prioridad general. Nuevo apartado "Elegí por categoría" en Hoy, dentro de "Resto de tus pendientes". La sección "Urgentes" de Hoy ahora también muestra la holgura de cada tarea en texto.
+- Se simplificaron 3 sorts (Hoy-Resto, Tareas-listado general, `calcularEnfoque8020`) que pre-ordenaban manualmente por `tarea_fecha_limite` antes de aplicar `compararPorPrioridad` — quedaban redundantes y hasta conflictivos con las bandas de holgura nuevas.
+
+### Eliminado
+
+- `tarea_genera_dinero` (campo, checkbox de alta/edición, badges en Tareas/Hoy/3-8 días): el usuario concluyó que ese criterio ya lo cubre el orden manual de las categorías raíz correspondientes (ej. "Trabajo"), y no lo quería si no participaba del algoritmo de prioridad.
+
+### Nota
+
+- Ver `REGLAS_DE_PRIORIDAD.md` para el detalle completo con ejemplos, y su sección final "Pendiente para próximas rondas" (vista "Todas" con filtros, herramienta "Versus" de desempate manual, reprogramado automático/manual de fechas vencidas).
+
+## [v0.45.0] - 2026-09-17
+
+### Cambiado
+
+- **Rediseño grande del modelo de datos**, definido en conjunto con el usuario tras revisar a fondo `DICCIONARIO_DE_DATOS.md`:
+  - **Subcategoria desaparece como entidad**: Categoria pasa a auto-referenciarse (`categoria_padre_id`), permitiendo jerarquías de profundidad libre. La vista Categorías pasa de lista con subcategorías anidadas a un árbol recursivo (reordenamiento ▲/▼ ahora acotado a categorías hermanas). Los badges de tareas muestran el camino completo hasta la raíz (ej. "Facultad / IR").
+  - `tarea_estado` pasa a `bloqueada`/`pendiente`/`completada`, donde `bloqueada` es ahora un valor persistido (antes se calculaba al vuelo). Se sincroniza automáticamente al crear una tarea, al editar su dependencia, y en cascada al completarse la tarea de la que depende (que además le transfiere su fecha de finalización como nueva fecha de inicio habilitada).
+  - `dependencias` (array) pasa a `tarea_dependiente` (una sola referencia) y `metas_ids` (array) pasa a `meta_id` (una sola referencia) — los paneles correspondientes en Tareas pasan de checklist a selección única.
+  - Las fechas de Tarea (`tarea_fecha_inicio_habilitada`, `tarea_fecha_sugerida`, `tarea_fecha_limite`) admiten hora opcional en el mismo campo — se fusiona el viejo campo separado `fecha_hora_agendada` dentro de `tarea_fecha_sugerida`. El panel de "Posponer" deja de exigir horario.
+  - `tarea_mantenimiento` pasa a booleano simple; el intervalo (`{cantidad, unidad}`) se guarda aparte en `tarea_mantenimiento_intervalo`.
+  - `tarea_notas` se renombra a `tarea_descripcion`; se agrega `categoria_descripcion`.
+  - Migración retrocompatible automática (incluida la fusión Subcategoria→Categoria) para los datos reales del usuario, guardados en el formato de la ronda anterior.
+
+### Eliminado
+
+- `tarea_divisible`, `tarea_multitasking`, `tarea_recompensa`, duración/costo real (`tarea_duracion_real_min`, `tarea_costo_real`), `persona_notas`, y toda la función de notificaciones locales (`assets/js/notificaciones.js`, botón, campo de control) — todo por decisión del usuario, algunos anotados en `BACKLOG.md` para reevaluar más adelante.
+
+### Nota
+
+- `REGLAS_DE_PRIORIDAD.md` queda con un criterio provisorio y simple (solo `categoria_prioridad`) — el algoritmo real de prioridad se define en una ronda aparte.
+
+## [v0.44.0] - 2026-09-16
+
+### Agregado
+
+- Atributo `tarea_genera_dinero` (booleano, default `false`): checkbox en el alta y edición de tarea, badge "💵 Genera ingreso" en Tareas, Hoy y 3/8 días (mismos lugares donde ya aparecen recompensa/costo estimado). Por ahora es solo informativo, sin proyección en Informes.
+- Atajo de teclado "N" (sin modificador) para crear una tarea rápido en PC: navega a Tareas y enfoca el input de alta rápida. Se ignora si el foco está en cualquier campo editable, para no interferir al escribir. `Ctrl+N` está reservado por el navegador (nueva ventana), por eso se usa la tecla sola.
+- Documentación: `REGLAS_DE_PRIORIDAD.md` (qué determina el orden/prioridad de las tareas y cómo se usa en cada vista) y `LOGICA_FUNCIONES.md` (qué hace cada función/módulo del proyecto, referenciando `DICCIONARIO_DE_DATOS.md`). Documentación viva, a actualizar junto con cada cambio funcional — convención sumada a `AGENTS.md`.
+
+## [v0.43.0] - 2026-09-16
+
+### Cambiado
+
+- Renombrado masivo de campos al patrón `entidad_atributo`: cada campo propio de una entidad se prefija con el nombre de la entidad (ej. `Tarea.nombre` → `tarea_nombre`, `Categoria.color` → `categoria_color`), para evitar ambigüedad cuando una entidad usa atributos de otra. Los campos que ya son una referencia a otra entidad (`categoria_id`, `subcategoria_id`, `ubicacion_id`, `dependencias`, `metas_ids`) quedan sin cambios. Afecta `assets/js/modelos.js`, todas las vistas, `datos/esquema.json`, `DICCIONARIO_DE_DATOS.md` y los archivos de ejemplo. Convención documentada en `AGENTS.md`.
+- Migración retrocompatible: `assets/js/almacenamiento.js` detecta y convierte automáticamente datos guardados con los nombres de campo anteriores (localStorage, carpeta local, Google Drive o JSON importado), sin pérdida de información ni acción manual del usuario. Se aplica de forma transparente en los 4 puntos de carga de datos.
+
+### Eliminado
+
+- Campo `motivo_incumplimiento` de Tarea: no aportaba valor dentro del sistema actual. Se eliminó del modelo, de la captura en el flujo "No cumplida" (Hoy y "Revisar mi día") y de la métrica "Índice de procrastinación" en Informes, que dependía enteramente de este campo y también se eliminó.
+
+## [v0.42.0] - 2026-09-16
+
+### Agregado
+
+- Vista "Tabla" de tareas pendientes: nueva vista `views/tabla.view.js` con todas las tareas no completadas ordenadas por la fecha más próxima (agendada > límite > sugerida, reutilizando `fechaDeReferencia` de `assets/js/vista-agenda.js`, ahora exportada). Columnas: Nombre, Categoría/Subcategoría, Importancia, Estado, Fecha y una columna nueva "Días" (usa `diasEntreFechas` de `assets/js/utilidades.js`) que muestra "En 3 días"/"Hoy"/"Vencida hace 2 días"/"Sin fecha". Clic en una fila abre esa tarea en edición en Tareas (mismo mecanismo ya usado por Gantt/Semana). Diseñada tras investigar en vivo (vía conectores de Notion y Google Calendar) cómo el usuario organiza hoy sus tareas reales — la vista replica directamente la tabla "Completo" que ya usaba en Notion.
+
+## [v0.41.0] - 2026-09-16
+
+### Agregado
+
+- Filtro de "ubicación actual" unificado: nuevo módulo `assets/js/ubicacion-actual.js` (clave propia de `localStorage`, mismo patrón que el tema claro/oscuro) reemplaza las dos variables de filtro de ubicación que existían por separado en Hoy y Tareas. Ahora Hoy, Tareas y 3/8 días comparten la misma "ubicación actual": elegirla desde cualquiera de esas vistas se refleja en las otras sin recargar, y persiste entre recargas de página. Nuevo selector "¿Dónde estás?" agregado a `assets/js/vista-agenda.js` (3/8 días), que antes no tenía ningún filtro de ubicación.
+
+## [v0.40.0] - 2026-09-16
+
+### Agregado
+
+- Versión visible en la cabecera: nueva constante `VERSION` en `assets/js/app.js`, mostrada junto al título "Super To-Do List". `AGENTS.md` documenta mantenerla sincronizada con esta lista en cada entrega.
+
+### Cambiado
+
+- Triage del backlog abierto de cara a v1.0.0: se reemplazó la idea de notificación por GPS por un ítem más simple (filtro de "ubicación actual"); se descartaron "comparación de throughput con amigos" y "tareas nuevas tras cursada"; se eliminó "exportar/importar categoría completa"; se priorizó "lectura de eventos pasados de Calendar" para una próxima ronda; se postergó explícitamente el "integrador más amplio" a después de v1.0.0.
+
+## [v0.39.1] - 2026-09-16
+
+### Corregido
+
+- Caché agresiva en producción (GitHub Pages): la CDN de GitHub Pages manda `Cache-Control: max-age=600`, cabecera que también gobernaba los `fetch()` del propio Service Worker — el navegador podía resolverlos con una copia local sin llegar a la red, aunque la estrategia se llame "network-first". Detectado en vivo: tras mergear a `main`, el sitio seguía mostrando contenido viejo pese a que la CDN ya servía el archivo correcto (confirmado con `curl`). `sw.js` ahora pasa `{ cache: 'reload' }` en el `fetch` del handler (igual que ya hacía el precache de `install`), y se bumpeó `CACHE_NAME` a `v2` para forzar la actualización inmediata en los dispositivos que ya tenían el Service Worker instalado.
+
+## [v0.39.0] - 2026-09-16
+
+### Quitado
+
+- Datos de ejemplo al primer arranque: `sembrarDatosDeEjemplo()` (categorías y tareas de prueba) ya no se ejecuta en `inicializarAlmacenamiento()`. Ahora que el usuario va a usar la app con datos reales sincronizados entre varios dispositivos vía Google Drive, un dispositivo nuevo arranca vacío en vez de con contenido de muestra que después hay que borrar a mano.
+
+## [v0.38.0] - 2026-09-16
+
+### Agregado
+
+- Sincronización vía Google Drive API: evaluadas las 4 opciones registradas en `BACKLOG.md` ("Sync — opciones a evaluar"), se eligió Google Drive API vía OAuth por ser la única que resuelve el uso desde el celular (la carpeta local actual no funciona en navegadores móviles) sin sumar un backend. Nuevo módulo `assets/js/google-drive-sync.js`, mismo patrón que `google-calendar.js` (Google Identity Services, token en memoria) con su propio scope `drive.file` (acceso restringido, solo a archivos creados por la app). Un único archivo JSON remoto con el `estado` completo, que se actualiza automáticamente en cada guardado mientras la sesión sigue conectada. Nuevo botón "Sincronizar con Google Drive" en la cabecera. Si el archivo remoto cambió por fuera desde la última sincronización conocida de este dispositivo, se pregunta con `confirm()` cuál versión conservar antes de pisar nada (sin merge automático). El token no se persiste entre sesiones, igual que Calendar.
+
+### Corregido
+
+- Bug de reconexión colgada en `assets/js/google-calendar.js` y `assets/js/google-drive-sync.js`: el `callback` del `TokenClient` de Google (un singleton) quedaba atado al `resolve`/`reject` de la primera conexión; una reconexión posterior en la misma pestaña (token vencido) nunca resolvía su propia promesa porque el callback seguía resolviendo la de la primera llamada. Se resolvió con una indirección (`manejarRespuestaToken`) que cada conexión reasigna a su propio resolve/reject.
+- Bug de condición de carrera en `assets/js/app.js`: el script de Google Identity Services carga en paralelo (`async`/`defer`); si el primer `render()` corría antes de que terminara de cargar, el botón "Sincronizar con Google Drive" quedaba oculto para siempre (detectado en pruebas reales del usuario: el botón no aparecía tras una recarga forzada). Ahora se vuelve a evaluar su visibilidad apenas ese script termina de cargar.
+
+## [v0.37.0] - 2026-09-16
+
+### Agregado
+
+- Revisar calendario al final del día — con datos reales: nuevo paso final en el asistente "Revisar mi día" (`assets/js/revision-dia.js`) que, gracias a la conexión OAuth con Google Calendar agregada en v0.35.0, muestra los eventos reales de hoy en vez de preguntar a ciegas. Si no hay conexión, ofrece conectar ahí mismo; si falla la consulta o no hay soporte, degrada a la pregunta manual. Un alta rápida permite cargar tareas de continuidad sin cerrar el diálogo, pudiendo agregar varias seguidas.
+
+## [v0.36.0] - 2026-09-16
+
+### Agregado
+
+- Rediseño visual + modo claro/oscuro: `assets/css/main.css` centralizaba casi todos los colores en variables CSS, así que redefinirlas alcanzó para re-temear toda la app. Nuevo botón de tema en la cabecera que alterna entre claro/oscuro, guarda la preferencia en `localStorage` (clave `super-todo-list:tema`, separada de los datos de la app) y respeta `prefers-color-scheme` del sistema como default cuando no hay preferencia guardada. Retoques de modernización: transiciones suaves en botones/tarjetas, hover con elevación en `.item-tarea`/`.tarjeta-categoria`, nav con estilo "pill".
+
+### Corregido
+
+- Bug de cascada CSS preexistente: `.etiqueta-fecha` (definida más abajo en `main.css`) le ganaba a los colores especiales de `.etiqueta-agendada`/`.etiqueta-mantenimiento`/`.etiqueta-clima`/`.etiqueta-solapamiento-calendar`, que nunca se habían mostrado con su color distintivo. Se resolvió calificando esos selectores con el tag (`span.etiqueta-agendada`, etc.) para aumentar su especificidad.
+
+## [v0.35.0] - 2026-09-16
+
+### Agregado
+
+- Google Calendar — lectura de eventos y detección de solapamientos: a diferencia de la exportación existente (sin OAuth), leer eventos reales requiere autenticarse. Se usa Google Identity Services (`accounts.google.com/gsi/client`, primera dependencia externa vía `<script>` del proyecto) con el flujo de token client de solo lectura (`calendar.readonly`); el token queda en memoria (sin backend, sin persistir nada sensible) y se renueva reconectando con un click cuando expira. Nuevo botón "Conectar con Google Calendar" en la vista Hoy (`views/hoy.view.js`) y nuevo módulo `assets/js/google-calendar.js` (`conectarGoogleCalendar`, `obtenerEventosDeHoy`, `calcularSolapamiento`). Las tareas agendadas (`fecha_hora_agendada`) que se superponen con un evento real de hoy muestran el aviso "📅 Se superpone con...", mismo patrón de badge asíncrono ya usado para el aviso de clima.
+
+## [v0.34.0] - 2026-09-16
+
+### Agregado
+
+- Notificaciones — primer paso (locales, no push real): sin backend ni servidor propio, un Web Push real (VAPID + push service) no es viable, así que se implementa una revisión periódica en el cliente. Nuevo módulo `assets/js/notificaciones.js`: cada 60s (mientras la app está abierta) revisa si hay tareas con `fecha_hora_agendada` a menos de 10 minutos y dispara una notificación del navegador vía `registration.showNotification` (con fallback a `new Notification` si no hay service worker). Nuevo botón "Activar notificaciones" en la cabecera (`index.html`) para solicitar el permiso, con estados según `Notification.permission`. Nuevo campo `notificada_en_para` en Tarea (`assets/js/modelos.js`) para no repetir el aviso de la misma tarea, que se limpia automáticamente al reprogramarla. `sw.js` ahora maneja `notificationclick` para enfocar o abrir la app al tocar la notificación.
+
+## [v0.33.0] - 2026-09-15
+
+### Agregado
+
+- Chatbot para definir metas — primer paso: nuevo botón "Definir meta charlando con IA" en la vista Metas. A diferencia de los paneles de IA de un solo turno (v0.31.0, v0.32.0), permite una conversación de ida y vuelta: cada mensaje se agrega a un historial en memoria que se reenvía completo en cada prompt (sin backend, el LLM externo no tiene memoria propia entre turnos). Al finalizar la charla, un último prompt le pide a la IA un JSON con los datos de la meta (nombre, plazo, fecha objetivo, descripción), que se previsualiza y crea con `crearMeta` igual que el formulario manual. Nuevas funciones en `assets/js/ia-conectable.js`: `construirPromptChatMeta`, `parsearRespuestaChatMeta`, `construirPromptFinalizarMeta`, `parsearRespuestaFinalizarMeta`.
+
+## [v0.32.0] - 2026-09-15
+
+### Agregado
+
+- IA conectable — reestructurar prioridades: nuevo botón "Reestructurar prioridades con IA" en la vista Tareas. Arma un prompt con las tareas accionables actuales (id, nombre, categoría, fecha límite, importancia actual) pidiéndole a un asistente de IA externo que sugiera una nueva importancia para cada una; al pegar la respuesta (JSON) previsualiza solo los cambios reales (donde la sugerida difiere de la actual) con checkboxes, y aplica únicamente los seleccionados. Mismo flujo manual de copiar/pegar que la sugerencia de subtareas de v0.31.0 (`assets/js/ia-conectable.js`).
+
+## [v0.31.0] - 2026-09-15
+
+### Agregado
+
+- Capa de IA conectable — primer paso: nuevo módulo `assets/js/ia-conectable.js` y botón "Sugerir tareas con IA" en cada meta de la vista Metas. Arma un prompt para copiar/pegar en un asistente de IA externo (ChatGPT, Claude, etc.) pidiéndole tareas concretas para esa meta; permite pegar la respuesta (JSON), previsualizar las tareas propuestas con checkboxes, y agregar las seleccionadas asociadas a la meta. Flujo 100% manual (copiar/pegar) — el core de la app nunca llama a ninguna API de LLM ni depende de tokens.
+
+## [v0.30.0] - 2026-09-15
+
+### Agregado
+
+- Nueva sección "Throughput semanal" en Informes: gráfico de barras con la cantidad de tareas completadas por semana (últimas 8 semanas, buckets de 7 días) y el promedio semanal en esa ventana. Calculado al vuelo sobre `completada_en`, sin campos ni entidades nuevas.
+
+## [v0.29.0] - 2026-09-15
+
+### Agregado
+
+- PWA — precachear el app shell: `sw.js` ahora precachea en `install` el app shell completo (`ARCHIVOS_PRECACHE`), usando `cache: 'reload'` para saltear la caché HTTP del navegador al precachear. La primera carga sin conexión y sin visitas previas ahora también funciona (antes el caché arrancaba vacío). `AGENTS.md` documenta mantener esa lista al agregar archivos nuevos.
+
+## [v0.28.0] - 2026-09-15
+
+### Agregado
+
+- PWA — primer paso: `manifest.json` (instalable, con ícono `assets/icons/icon.svg`) y `sw.js` (service worker registrado desde `assets/js/app.js`). Estrategia network-first: intenta red primero y cae a caché solo sin conexión, para no interferir con la caché agresiva del navegador que ya afecta el desarrollo de este proyecto. No precachea un app shell fijo — el caché se va poblando con el uso normal.
+
+## [v0.27.0] - 2026-09-15
+
+### Agregado
+
+- Vista "Gantt": las tareas bloqueadas ahora muestran una flecha SVG que conecta el final de la barra bloqueante con el inicio de la bloqueada, cuando ambas están visibles en el filtro actual (se recalcula en cada render, incluido tras un arrastre). El texto "Bloqueada por..." se mantiene como respaldo para cuando la bloqueante no está visible. Con esto queda cerrada la idea de la vista Gantt (grilla v0.25.0, arrastre v0.26.0, flechas v0.27.0).
+
+## [v0.26.0] - 2026-09-15
+
+### Agregado
+
+- Vista "Gantt": cada barra ahora tiene asas de arrastre en el borde izquierdo/derecho (Pointer Events, mismo mecanismo que la vista Semana) para reprogramar `fecha_inicio_posible` (asa izquierda, mueve el inicio manteniendo el final) o `fecha_limite` (asa derecha, mueve el final manteniendo el inicio) directamente desde el Gantt, en pasos de un día.
+
+## [v0.25.0] - 2026-09-15
+
+### Agregado
+
+- Nueva vista **"Gantt"** — primer paso: selector de Meta (o "Todas las metas"); línea de tiempo horizontal con una barra por tarea asociada, posicionada/dimensionada según fecha de inicio y fin, coloreada por categoría/subcategoría. Las tareas bloqueadas muestran un aviso de texto ("Bloqueada por..."). Clic en una barra navega a Tareas con el panel de edición abierto. No incluye todavía arrastrar para reprogramar ni flechas de dependencia dibujadas — quedan en el backlog como ítems separados.
+- Nueva función compartida `diasEntreFechas` (`assets/js/utilidades.js`), que reemplaza el cálculo que tenía duplicado `views/personas.view.js`.
+
+## [v0.24.0] - 2026-09-15
+
+### Agregado
+
+- Nueva entidad **Persona** (`{ id, nombre, ultimo_contacto, notas }`) con su propio ABM (vista "Personas"). La lista se ordena de mayor a menor tiempo sin contacto (las personas sin `ultimo_contacto` registrado quedan primero); botón "Marcar contacto hoy" para actualizar la fecha en un clic.
+
+### Descartado
+
+- "Rutina diaria configurable" se descarta como ítem aparte del backlog: ya se resuelve con el campo `mantenimiento` existente (`cantidad: 1, unidad: 'dias'`), no requiere una entidad nueva.
+
+## [v0.23.0] - 2026-09-15
+
+### Agregado
+
+- Campos `costo_estimado` (default `0`) y `costo_real` (default `null`) por tarea, mismo patrón que `duracion_estimada_min`/`duracion_real_min`: input en el alta y en editar, badge "💰" en Tareas/Hoy/3-8 días, y captura opcional del costo real al completar una tarea desde Hoy o "Revisar mi día" (junto a la duración real). Se conserva `costo_estimado` al clonarse una instancia de mantenimiento.
+- Nueva sección "Costos" en Informes: proyección del costo estimado de las tareas pendientes, y comparación de costo estimado vs. real sobre las tareas completadas con ambos datos cargados.
+
+## [v0.22.0] - 2026-09-15
+
+### Agregado
+
+- Regla 80/20 (Pareto): nueva función compartida `calcularEnfoque8020` (`assets/js/tareas-logica.js`) que toma el 20% superior (redondeado hacia arriba) de las tareas pendientes accionables según el orden de prioridad ya existente (importancia + prioridad de categoría + fecha límite). Se muestra como badge "🎯 Foco 80/20" en Tareas y Hoy, y como lista en una nueva sección "Enfoque 80/20 (Pareto)" en Informes.
+- Nueva función compartida `esTareaAccionable` (`assets/js/tareas-logica.js`), que reemplaza la lógica duplicada que tenían `assets/js/disfrute.js` y `views/semana.view.js`.
+
+## [v0.21.0] - 2026-09-15
+
+### Agregado
+
+- Vista "Semana": las asas de arrastre (ya existentes para tareas fijas desde v0.20.0) ahora también funcionan sobre bloques proyectados. Arrastrar cualquiera de las dos asas de un bloque proyectado le asigna `fecha_hora_agendada` según la posición soltada — la tarea pasa a listarse como fija en el siguiente render, sin pasar por el panel de edición. Completa la idea original de la vista semanal.
+
+## [v0.20.0] - 2026-09-15
+
+### Agregado
+
+- Vista "Semana": los bloques de tareas fijas ahora tienen asas de arrastre en el borde superior e inferior (Pointer Events, funciona también por touch) para reprogramar `fecha_hora_agendada` (asa superior, mueve el inicio manteniendo el final) o `duracion_estimada_min` (asa inferior, mueve el final manteniendo el inicio) directamente desde la grilla, en pasos de 15 minutos, sin abrir el panel de edición. Los bloques proyectados siguen siendo solo clic-para-editar.
+
+## [v0.19.0] - 2026-09-15
+
+### Agregado
+
+- Nueva vista **"Semana"**: grilla de 7 días (empezando hoy) por 16 horas (07:00-23:00). Las tareas con `fecha_hora_agendada` (fijas) se ubican en su día y horario exacto; las tareas pendientes sin agendar pero con fecha sugerida o límite dentro de la semana (proyectadas) se apilan por prioridad a partir de las 07:00, con estilo punteado para diferenciarlas. Clic en cualquier bloque navega a Tareas con el panel de edición de esa tarea ya abierto (`abrirEdicionAlEntrar` en `views/tareas.view.js`). No incluye todavía arrastrar para reprogramar — queda en el backlog como ítem separado.
+
+## [v0.18.0] - 2026-09-15
+
+### Agregado
+
+- Campo `importancia` (enum `baja`/`media`/`alta`, default `media`) por tarea: select en el alta y en editar, badge con ícono (🔴/🟡/🟢) en Tareas, Hoy y las vistas de 3/8 días, y filtro "Importancia" en Tareas.
+- `compararPorPrioridad` (usada por Tareas, Hoy y 3/8 días) ahora ordena primero por importancia y recién después por la prioridad de categoría, permitiendo destacar una tarea puntual por encima de otras de la misma categoría/fecha.
+
+## [v0.17.0] - 2026-09-14
+
+### Agregado
+
+- Campo `multitasking` (booleano, default `false`) por tarea: checkbox en el alta y en editar, badge "🎧 Multitasking" en la vista Tareas, y filtro "Solo multitasking" para encontrar tareas que se pueden hacer en simultáneo con otra actividad de baja atención (ej. escuchar un podcast mientras se plancha).
+- Toggle "Agrupar por categoría" en la vista Tareas: agrupa el listado filtrado por categoría (orden según `Categoria.orden`, con un grupo "Sin categoría" al final), en vez de la lista plana por fecha/prioridad.
+
+## [v0.16.0] - 2026-09-12
+
+### Agregado
+
+- Campo `disfrute` (1-5, default 3) por categoría: select en el alta, indicador de estrellas en la tarjeta de la vista Categorías.
+- Sugerencia automática al completar una tarea de una categoría de bajo disfrute (1-2): si hay alguna tarea accionable de una categoría de alto disfrute (4-5), se sugiere continuar con ella. Se muestra en los 3 caminos de completar (Tareas, Hoy, Revisar mi día), junto al aviso de recompensa. Nuevo módulo `assets/js/disfrute.js`.
+
+## [v0.15.0] - 2026-09-12
+
+### Agregado
+
+- Campo `recompensa` (texto libre, opcional) por tarea: input en el alta y en editar, se suma al autocompletado, badge "🎁" en Tareas/Hoy/3-8 días.
+- Al completar una tarea (desde cualquiera de los 3 caminos: Tareas, Hoy, Revisar mi día), si tiene recompensa cargada se muestra un aviso "🎉 ¡Completaste... ! Te ganaste: ...", antes de la pregunta de exportar a Calendar. Nuevo módulo `assets/js/recompensa.js`.
+- Las tareas de mantenimiento conservan la recompensa al clonarse la siguiente instancia.
+
+## [v0.14.0] - 2026-09-12
+
+### Agregado
+
+- Nueva vista **"Informes"**, 100% de lectura sobre los últimos 7 días: tabla de tareas completadas vs. pendientes por categoría, promedio de duración estimada vs. real (con la diferencia porcentual), e índice de procrastinación (proxy sobre el estado actual: tareas pospuestas al menos una vez y sin completar, contra completadas recientes). No se agregan campos nuevos al modelo — todo se calcula al vuelo sobre datos que ya existían.
+
+## [v0.13.0] - 2026-09-12
+
+### Agregado
+
+- Las subcategorías ahora tienen su propio `color` (hereda el de la categoría padre por defecto al crearla, se puede elegir otro). Se muestra como un punto de color junto al nombre en la vista Categorías.
+- Los badges de categoría/subcategoría en Tareas, Hoy y las vistas de 3/8 días usan el color de la subcategoría cuando la tarea tiene una asignada (antes siempre usaban el de la categoría).
+
+## [v0.12.0] - 2026-09-12
+
+### Agregado
+
+- Nueva entidad **Meta** (`{ id, nombre, plazo, descripcion, fecha_objetivo }`) con su propio ABM (vista "Metas"). Cada meta muestra su progreso (tareas completadas / tareas asociadas, con barra simple) y la lista de tareas asociadas con su estado.
+- Las tareas ahora pueden aportar a una o varias metas (`metas_ids`): nuevo botón "Metas" en la vista Tareas con un panel checklist (mismo patrón que "Dependencias"). Al eliminar una meta, las tareas que la referenciaban quedan sin esa entrada.
+
+## [v0.11.0] - 2026-09-11
+
+### Agregado
+
+- Botones ▲/▼ por categoría en la vista Categorías para reordenar su `orden` (antes quedaba fijo al crearla).
+- La prioridad de categoría (`orden`) ahora se usa como desempate al ordenar tareas: en Tareas y en "Resto de tus pendientes" de Hoy (después de la fecha límite), en "Urgentes" de Hoy (criterio principal, ya que todas comparten la misma urgencia), y dentro de cada columna de día en las vistas de 3/8 días (después de la hora agendada). Nueva función compartida `compararPorPrioridad` en `assets/js/tareas-logica.js`.
+
+## [v0.10.0] - 2026-09-10
+
+### Agregado
+
+- Nueva entidad **Ubicación** (`{ id, nombre, latitud, longitud }`) con su propio ABM (vista "Ubicaciones", igual patrón que Categorías). Las tareas ahora referencian `ubicacion_id` en vez del campo de texto libre `ubicacion` que se había agregado en v0.9.0 (**breaking change** interno: las tareas viejas quedan con un `ubicacion` huérfano sin uso, no se migra).
+- Checkbox `requiere_clima_bueno` por tarea: si está activo y la tarea tiene una ubicación con coordenadas y una fecha resoluble dentro de los próximos 16 días, en **Hoy** y en las vistas de **3/8 días** se consulta el pronóstico real contra la API de Open-Meteo (gratis, sin API key) y se muestra un aviso "🌧️ Lluvia probable — considerá posponer" cuando la probabilidad de lluvia es alta. Nuevo módulo `assets/js/clima.js` con caché en memoria por ubicación/fecha.
+
+### Cambiado
+
+- Los filtros de ubicación en Tareas y Hoy ahora listan las ubicaciones del ABM en vez de valores de texto deduplicados.
+
+## [v0.9.0] - 2026-09-10
+
+### Agregado
+
+- Campo `ubicacion` (texto libre, opcional) en las tareas: input en el alta y en editar (con autocompletado), badge "📍" en Tareas, Hoy y las vistas de 3/8 días.
+- Filtro manual por ubicación ("¿dónde estás?") en la vista Tareas y en Hoy, construido dinámicamente a partir de las ubicaciones ya cargadas — sin GPS ni geolocalización.
+
+## [v0.8.0] - 2026-09-10
+
+### Agregado
+
+- Campo `divisible`: checkbox en el alta y en editar, badge "⏸ Divisible" en el listado. Informativo por ahora.
+- Campo `dias_habiles`: checklist de días de la semana en el alta y en editar. El panel de reprogramar (Tareas, Hoy, 3/8 días, Revisar mi día) ahora recibe los días hábiles de la tarea y ajusta automáticamente cualquier fecha elegida (atajo o manual) al próximo día permitido.
+
+Con esto, Fase 2 queda completa salvo los ítems de baja prioridad documentados en el backlog (agrupar por similitud, prioridad entre categorías, SCRUM).
+
+## [v0.7.0] - 2026-09-10
+
+### Agregado
+
+- Exportar a Google Calendar: al completar una tarea (desde Tareas, Hoy, o Revisar mi día), se pregunta si se quiere abrir en Google Calendar como registro histórico. Arma la URL de `calendar.google.com/render` con título, horario (fin = momento real de finalización, inicio = fin menos la duración real/estimada) y descripción (categoría, duración, notas) — sin OAuth ni API key, el usuario la guarda con un clic desde su sesión ya logueada. Nuevo módulo `assets/js/exportar-calendar.js`.
+
+## [v0.6.0] - 2026-09-10
+
+### Agregado
+
+- Alta rápida de tareas: barra compacta arriba de la vista Tareas (solo nombre) para cargar algo al vuelo desde el celular.
+- Autocompletado predictivo: el campo nombre del formulario detallado sugiere tareas ya creadas (`<datalist>`); al coincidir el nombre exacto, precarga categoría/subcategoría/duración/notas/mantenimiento.
+- Edición de tarea: nuevo botón "Editar" por tarea en la vista Tareas, con panel para modificar nombre, categoría/subcategoría, fechas, duración, notas y mantenimiento de una tarea existente — necesario para que la alta rápida tenga sentido (cargar solo el nombre y completar el resto después).
+
+## [v0.5.0] - 2026-09-10
+
+### Agregado
+
+- Atajo "primer [día de la semana] del próximo mes" en el panel de reprogramar.
+- Asistente de cierre a nivel día completo: botón "Revisar mi día" en Hoy abre un diálogo que repasa una por una las tareas accionables (Cumplida/No cumplida/Saltar), avanzando automáticamente. Nuevo módulo `assets/js/revision-dia.js`.
+- Mejora continua para tareas de mantenimiento: al completarlas (desde cualquiera de los 3 caminos: Tareas, Hoy por tarjeta, o Revisar mi día) se pregunta opcionalmente qué mejorar la próxima vez, y queda anotado en la instancia clonada.
+- Detección de dependencias cíclicas más allá de un ciclo directo: `puedeAgregarDependencia` ahora recorre todo el grafo de dependencias en profundidad.
+
+## [v0.4.0] - 2026-09-08
+
+### Agregado
+
+- Vistas "3 días" y "8 días": agrupan las tareas pendientes por día (usando `fecha_hora_agendada`, si no `fecha_limite`, si no `fecha_sugerida`, en ese orden) para anticipar cuellos de botella antes de que se vuelvan urgentes. Cada tarjeta muestra las mismas etiquetas que en Tareas/Hoy (categoría, fechas, mantenimiento, bloqueada) y permite "Posponer" directamente.
+- Nuevo módulo `assets/js/vista-agenda.js` con la lógica de agrupamiento por día, compartida por ambas vistas (`views/tres-dias.view.js` y `views/ocho-dias.view.js` son wrappers finos sobre el mismo renderer).
+
+## [v0.3.0] - 2026-09-08
+
+### Agregado
+
+- Dependencias entre tareas (`dependencias`): panel "Dependencias" en la vista Tareas para marcar de qué otras tareas depende una. Una tarea con dependencias sin completar queda "bloqueada": no aparece como accionable en la vista Hoy (nueva sección "Bloqueadas por otras tareas") y se marca con un aviso en la vista Tareas.
+- Reprogramación en cascada: al posponer una tarea que ya tenía una fecha agendada, las tareas que dependen de ella se corren automáticamente el mismo delta de tiempo.
+- Tareas de mantenimiento cíclicas (`mantenimiento`): al completar una tarea marcada como mantenimiento (desde el selector de estado o desde el asistente de cierre de Hoy), la instancia queda `completada` como historial y se crea automáticamente una nueva tarea `pendiente` con la fecha límite recalculada desde la fecha real de finalización.
+- Nuevo módulo `assets/js/tareas-logica.js` con la lógica compartida entre vistas (completar tarea, reprogramar con cascada, chequeo de bloqueo, validación de dependencias).
+
+## [v0.2.0] - 2026-09-08
+
+### Agregado
+
+- Campo `fecha_inicio_posible` en las tareas: la vista "Hoy" separa en una sección aparte ("Todavía no pueden empezar") las tareas cuya fecha de inicio todavía no llegó.
+- Botón "Posponer" (vista Tareas y vista Hoy) con panel de atajos de reprogramación: día (Hoy, Mañana, +7/+15/+30 días o fecha manual) + horario (Mañana 07:00, Tarde 12:00, Tardecita 17:00, Noche 20:00 o manual). Guarda el resultado en el nuevo campo `fecha_hora_agendada`.
+- Asistente de cierre en la vista "Hoy": botones "Cumplida ✓" (pide duración real y la guarda en `duracion_real_min`) y "No cumplida ✗" (pide motivo, lo guarda en `motivo_incumplimiento`, y abre el panel de reprogramación).
+
+## [v0.1.0] - 2026-09-08
+
+### Agregado
+
+- Estructura inicial del proyecto: carpetas `assets/`, `views/`, `datos/` y documentación base (`README.md`, `AGENTS.md`, `SPEC.md`, `BACKLOG.md`, `DICCIONARIO_DE_DATOS.md`, `NOTAS_ORIGINALES.md`).
+- MVP funcional 100% cliente (HTML/CSS/JS vanilla, sin backend):
+  - ABM de categorías y subcategorías.
+  - ABM de tareas (nombre, categoría/subcategoría, estado, fecha límite, fecha sugerida, duración estimada, notas).
+  - Vista "Hoy" con separación entre tareas urgentes (vencidas o de hoy) y el resto de pendientes.
+  - Vista "Tareas" con filtros por categoría/estado y orden por fecha límite.
+  - Vista "Categorías" para administrar la jerarquía.
+  - Persistencia en JSON local vía File System Access API (carpeta elegida por el usuario, pensada para vivir dentro de Google Drive), con `localStorage` de respaldo y exportar/importar JSON manual como fallback.
+- Datos y esquema de ejemplo versionados en `datos/`.

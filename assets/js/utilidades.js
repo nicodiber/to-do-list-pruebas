@@ -1,0 +1,309 @@
+export function generarId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID();
+  }
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+/**
+ * Zona horaria de referencia de toda la app: la del dispositivo (en Argentina, UTC-3 todo el año).
+ * Un valor de solo fecha (`YYYY-MM-DD`) es un día del calendario; uno con hora es un instante en UTC
+ * (`toISOString()`) que se muestra y se agrupa por día en hora local. Para sacar "el día" de un
+ * instante nunca se corta el texto (daría el día UTC, que de 21:00 a 24:00 ya es el siguiente):
+ * se usan `fechaLocalISO` / `diaLocal`.
+ */
+
+/** El día local de un `Date` como `YYYY-MM-DD`. */
+export function fechaLocalISO(fecha = new Date()) {
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+}
+
+/** El día local de un valor de tarea: la misma fecha si no lleva hora; el día local del instante si la lleva. */
+export function diaLocal(fechaISO) {
+  if (!fechaISO) return '';
+  return tieneHora(fechaISO) ? fechaLocalISO(new Date(fechaISO)) : fechaISO;
+}
+
+/** La hora local de un instante como `HH:MM` (24 horas). */
+export function formatearHora(fechaISO) {
+  const fecha = new Date(fechaISO);
+  return `${String(fecha.getHours()).padStart(2, '0')}:${String(fecha.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Minutos desde medianoche de un horario `HH:MM` (admite "24:00" = 1440). */
+export function minutosDeHHMM(hhmm) {
+  const [horas, minutos] = String(hhmm).split(':').map(Number);
+  return horas * 60 + minutos;
+}
+
+/** Hoy, como día local. */
+export function hoyISO() {
+  return fechaLocalISO();
+}
+
+export function ahoraISO() {
+  return new Date().toISOString();
+}
+
+export function formatearFecha(fechaISO) {
+  if (!fechaISO) return '';
+  const [anio, mes, dia] = fechaISO.split('-');
+  if (!anio || !mes || !dia) return fechaISO;
+  return `${dia}/${mes}/${anio}`;
+}
+
+export function esVencida(fechaLimiteISO) {
+  if (!fechaLimiteISO) return false;
+  return diaLocal(fechaLimiteISO) < hoyISO();
+}
+
+export function esHoy(fechaISO) {
+  if (!fechaISO) return false;
+  return diaLocal(fechaISO) === hoyISO();
+}
+
+/**
+ * Convención de fecha±hora usada en toda la app: un string de 10 caracteres
+ * (`YYYY-MM-DD`) significa "sin hora específica"; más de 10 significa
+ * datetime ISO completo con hora.
+ */
+export function tieneHora(fechaISO) {
+  return !!fechaISO && fechaISO.length > 10;
+}
+
+/** Pone en mayúscula la primera letra de un texto (el resto queda como está). */
+export function capitalizarPrimera(texto) {
+  const t = String(texto == null ? '' : texto);
+  return t.charAt(0).toLocaleUpperCase('es') + t.slice(1);
+}
+
+export function escaparHtml(texto) {
+  const div = document.createElement('div');
+  div.textContent = texto == null ? '' : String(texto);
+  return div.innerHTML;
+}
+
+export function formatearFechaHora(fechaHoraISO) {
+  if (!fechaHoraISO) return '';
+  const fecha = new Date(fechaHoraISO);
+  if (Number.isNaN(fecha.getTime())) return fechaHoraISO;
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const anio = fecha.getFullYear();
+  const horas = String(fecha.getHours()).padStart(2, '0');
+  const minutos = String(fecha.getMinutes()).padStart(2, '0');
+  return `${dia}/${mes}/${anio} ${horas}:${minutos}`;
+}
+
+/**
+ * Formatea una fecha de Tarea (`tarea_fecha_*`) según lleve hora o no,
+ * eligiendo automáticamente entre formatearFecha/formatearFechaHora.
+ */
+export function formatearFechaOFechaHora(fechaISO) {
+  return tieneHora(fechaISO) ? formatearFechaHora(fechaISO) : formatearFecha(fechaISO);
+}
+
+export function fechaISOMasDias(dias, desdeISODate) {
+  const base = desdeISODate ? new Date(desdeISODate + 'T00:00:00') : new Date();
+  base.setDate(base.getDate() + dias);
+  return fechaLocalISO(base);
+}
+
+export function combinarFechaYHora(fechaISODate, horaHHMM) {
+  const [horas, minutos] = horaHHMM.split(':').map(Number);
+  const fecha = new Date(fechaISODate + 'T00:00:00');
+  fecha.setHours(horas, minutos, 0, 0);
+  return fecha.toISOString();
+}
+
+export function noPuedeEmpezarTodavia(fechaInicioHabilitadaISO) {
+  if (!fechaInicioHabilitadaISO) return false;
+  if (tieneHora(fechaInicioHabilitadaISO)) {
+    return new Date(fechaInicioHabilitadaISO) > new Date();
+  }
+  return fechaInicioHabilitadaISO > hoyISO();
+}
+
+export function diasEntreFechas(fechaISO1, fechaISO2) {
+  const fecha1 = new Date(fechaISO1 + 'T00:00:00');
+  const fecha2 = new Date(fechaISO2 + 'T00:00:00');
+  return Math.round((fecha2 - fecha1) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Desplaza una fecha±hora de Tarea por un delta en milisegundos, preservando
+ * si el valor queda con hora (datetime completo) o sin ella (solo fecha) —
+ * usado por la cascada de reprogramación en tareas-logica.js.
+ */
+export function desplazarFecha(fechaISO, deltaMs) {
+  if (!fechaISO) return fechaISO;
+  if (tieneHora(fechaISO)) {
+    return new Date(new Date(fechaISO).getTime() + deltaMs).toISOString();
+  }
+  const deltaDias = Math.round(deltaMs / (24 * 60 * 60 * 1000));
+  const fecha = new Date(fechaISO + 'T00:00:00');
+  fecha.setDate(fecha.getDate() + deltaDias);
+  return fechaLocalISO(fecha);
+}
+
+/**
+ * Aplana el árbol de categorías (vía `categoria_padre_id`) en orden DFS,
+ * cada entrada con su `profundidad` (0 = raíz) — para renderizar listas/
+ * selects indentados. Los hermanos se ordenan por `categoria_prioridad`.
+ */
+export function arbolCategorias(categorias, padreId = null, profundidad = 0) {
+  return categorias
+    .filter((c) => (c.categoria_padre_id || null) === padreId)
+    .sort((a, b) => a.categoria_prioridad - b.categoria_prioridad)
+    .flatMap((c) => [
+      { categoria: c, profundidad },
+      ...arbolCategorias(categorias, c.categoria_id, profundidad + 1),
+    ]);
+}
+
+/**
+ * Arma el "camino" de nombres de una categoría hasta su raíz, recorriendo
+ * `categoria_padre_id` (ej. "Facultad / IR"). Con protección ante ciclos
+ * (no debería haberlos, pero evita un loop infinito si los datos están mal).
+ */
+/**
+ * Sube por `categoria_padre_id` hasta la categoría raíz (sin padre). Usado
+ * por `compararPorPrioridad` para que dos tareas de categorías distintas
+ * pero con la misma raíz (ej. dos materias de "Facultad") compitan primero
+ * por la prioridad de esa raíz. Con protección ante ciclos.
+ */
+export function categoriaRaiz(categoria, todasLasCategorias) {
+  if (!categoria) return null;
+  let actual = categoria;
+  const visitados = new Set();
+  while (actual.categoria_padre_id && !visitados.has(actual.categoria_id)) {
+    visitados.add(actual.categoria_id);
+    const padre = todasLasCategorias.find((c) => c.categoria_id === actual.categoria_padre_id);
+    if (!padre) break;
+    actual = padre;
+  }
+  return actual;
+}
+
+/**
+ * Ids de todas las categorías que cuelgan (a cualquier nivel) de `categoriaId`.
+ * Sirve para no ofrecer como padre de una categoría a ella misma ni a sus
+ * descendientes (crearía un ciclo).
+ */
+export function descendientesDeCategoria(categoriaId, todasLasCategorias) {
+  const ids = new Set();
+  const pendientes = [categoriaId];
+  while (pendientes.length > 0) {
+    const actual = pendientes.pop();
+    todasLasCategorias
+      .filter((c) => c.categoria_padre_id === actual)
+      .forEach((c) => {
+        if (ids.has(c.categoria_id)) return;
+        ids.add(c.categoria_id);
+        pendientes.push(c.categoria_id);
+      });
+  }
+  return ids;
+}
+
+/**
+ * Texto legible de una holgura en días (ver `calcularHolguraDias` en
+ * tareas-logica.js): cuánto margen queda antes de vencer, o hace cuánto que
+ * venció. Recibe el número ya calculado, no la tarea.
+ */
+export function textoHolgura(dias) {
+  if (dias === Infinity) return '';
+  if (dias < 0) return `Vencida hace ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`;
+  if (dias === 0) return 'Vence hoy';
+  return `Quedan ${dias} día${dias === 1 ? '' : 's'}`;
+}
+
+/** Igual que `textoHolgura`, pero con precisión de horas (v0.88.0, columna Holgura de Tabla): a partir del
+ * total de horas de margen, arma "Quedan N días Mh" / "Vencida hace N días Mh" (sin el día si es 0). */
+export function textoHolguraConHoras(horasTotal) {
+  if (horasTotal === Infinity) return '';
+  const vencida = horasTotal < 0;
+  const totalAbs = Math.abs(horasTotal);
+  const dias = Math.floor(totalAbs / 24);
+  const horas = totalAbs % 24;
+  const partes = [];
+  if (dias > 0) partes.push(`${dias} día${dias === 1 ? '' : 's'}`);
+  partes.push(`${horas}h`);
+  const texto = partes.join(' ');
+  return vencida ? `Vencida hace ${texto}` : `Quedan ${texto}`;
+}
+
+const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+/**
+ * Fecha±hora de Tarea en lenguaje humano para fechas cercanas ("hoy", "mañana", "pasado mañana",
+ * "próximo lunes"…"próximo domingo" hasta una semana), y el formato de siempre (`formatearFechaOFechaHora`)
+ * para el resto (más lejos o ya vencidas, donde el nombre del día no ayuda).
+ */
+export function textoFechaHumana(fechaISO) {
+  if (!fechaISO) return '';
+  const dias = diasEntreFechas(hoyISO(), diaLocal(fechaISO));
+  const hora = tieneHora(fechaISO) ? ` ${formatearHora(fechaISO)}` : '';
+  if (dias === 0) return `hoy${hora}`;
+  if (dias === 1) return `mañana${hora}`;
+  if (dias === 2) return `pasado mañana${hora}`;
+  if (dias >= 3 && dias <= 8) return `próximo ${DIAS_SEMANA[new Date(diaLocal(fechaISO) + 'T00:00:00').getDay()]}${hora}`;
+  return formatearFechaOFechaHora(fechaISO);
+}
+
+export function caminoCategoria(categoria, todasLasCategorias) {
+  if (!categoria) return '';
+  const nombres = [];
+  let actual = categoria;
+  const visitados = new Set();
+  while (actual && !visitados.has(actual.categoria_id)) {
+    nombres.unshift(actual.categoria_nombre);
+    visitados.add(actual.categoria_id);
+    actual = actual.categoria_padre_id
+      ? todasLasCategorias.find((c) => c.categoria_id === actual.categoria_padre_id)
+      : null;
+  }
+  return nombres.join(' / ');
+}
+
+/**
+ * Nombre de una tarea para avisos/carteles, con su categoría **antes** del nombre (v0.90.0 — antes
+ * `«nombre» (categoría)`; el orden nuevo hace más fácil distinguir de un vistazo tareas del mismo nombre en
+ * categorías distintas): `«Facultad Álgebra 2»`, o `«Álgebra 2»` sin categoría. Devuelve texto plano, sin
+ * escapar — quien arma HTML con esto (`modal-tarea.js`, `exportar-calendar.js`) lo escapa por su cuenta.
+ */
+export function nombrarConCategoria(tarea, categorias) {
+  const categoria = categorias.find((c) => c.categoria_id === tarea.categoria_id) ?? null;
+  const camino = caminoCategoria(categoria, categorias);
+  return `«${camino ? `${camino} ` : ''}${tarea.tarea_nombre}»`;
+}
+
+/** Interruptor Sí/No genérico (checkbox estilizado), para campos booleanos de cualquier formulario — categoría,
+ * tarea, persona, etc. (v0.91.0: movida acá desde `formulario-tarea.js`, que la tenía — `formularios-entidades.js`
+ * también la necesita, y como `formulario-tarea.js` ya importa de `formularios-entidades.js`, importar en
+ * sentido contrario crearía un ciclo). `atributos` son atributos HTML crudos adicionales para el `<input>`
+ * (ej. `title="..."`, `disabled`). */
+export function htmlInterruptor(nombre, marcado, texto, atributos = '') {
+  return `<label class="interruptor"><input type="checkbox" role="switch" name="${nombre}" ${marcado ? 'checked' : ''} ${atributos} /><span class="interruptor-pista" aria-hidden="true"></span><span class="interruptor-texto">${texto}</span><span class="interruptor-estado" aria-hidden="true"></span></label>`;
+}
+
+/**
+ * Ejecuta `redibujar()` (que reemplaza el HTML de `contenedor`) conservando el foco: si el elemento
+ * enfocado está dentro de `contenedor` y tiene `id`, después de redibujar busca ese mismo `id` y le
+ * devuelve el foco y la posición del cursor (útil para buscadores que se redibujan en cada tecla).
+ */
+export function conservarFoco(contenedor, redibujar) {
+  const activo = document.activeElement;
+  const idActivo = activo && contenedor.contains(activo) && activo.id ? activo.id : null;
+  const seleccion = idActivo && 'selectionStart' in activo ? { inicio: activo.selectionStart, fin: activo.selectionEnd } : null;
+
+  redibujar();
+
+  if (!idActivo) return;
+  const nuevo = contenedor.querySelector(`#${CSS.escape(idActivo)}`);
+  if (!nuevo) return;
+  nuevo.focus();
+  if (seleccion && 'setSelectionRange' in nuevo) {
+    nuevo.setSelectionRange(seleccion.inicio, seleccion.fin);
+  }
+}

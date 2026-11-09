@@ -1,0 +1,227 @@
+import { estado } from '../assets/js/almacenamiento.js';
+import { hoyISO, diaLocal, fechaISOMasDias, formatearFecha, escaparHtml } from '../assets/js/utilidades.js';
+import { fechaDeReferencia } from '../assets/js/vista-agenda.js';
+import { renderVistaProgreso } from './progreso.view.js';
+import { renderVistaHabitos } from './habitos.view.js';
+import { renderVistaCalendarPasado } from './calendar-pasado.view.js';
+import { compararEstimadoVsReal, aplicarFactorADuraciones } from '../assets/js/tiempo-real.js';
+import { persistirYNotificar } from '../assets/js/almacenamiento.js';
+import { avisar, confirmar } from '../assets/js/avisos.js';
+
+const DIAS_VENTANA = 7;
+const ESTADOS_ACTIVOS = ['bloqueada', 'pendiente'];
+
+function seCompletoEnVentana(tarea, desde) {
+  if (tarea.tarea_estado !== 'completada' || !tarea.tarea_fecha_fin) return false;
+  return diaLocal(tarea.tarea_fecha_fin) >= desde;
+}
+
+function calcularPorCategoria(desde) {
+  const filas = estado.categorias.map((categoria) => {
+    const tareasCategoria = estado.tareas.filter((t) => t.categoria_id === categoria.categoria_id);
+    return {
+      nombre: categoria.categoria_nombre,
+      color: categoria.categoria_color,
+      completadas: tareasCategoria.filter((t) => seCompletoEnVentana(t, desde)).length,
+      pendientes: tareasCategoria.filter((t) => ESTADOS_ACTIVOS.includes(t.tarea_estado)).length,
+    };
+  });
+
+  const sinCategoria = estado.tareas.filter((t) => !t.categoria_id);
+  filas.push({
+    nombre: 'Sin categoría',
+    color: '#9ca3af',
+    completadas: sinCategoria.filter((t) => seCompletoEnVentana(t, desde)).length,
+    pendientes: sinCategoria.filter((t) => ESTADOS_ACTIVOS.includes(t.tarea_estado)).length,
+  });
+
+  return filas.filter((f) => f.completadas > 0 || f.pendientes > 0);
+}
+
+function calcularProyeccionCostos() {
+  const pendientesConCosto = estado.tareas.filter((t) => ESTADOS_ACTIVOS.includes(t.tarea_estado) && t.tarea_costo_estimado);
+  const total = pendientesConCosto.reduce((suma, t) => suma + t.tarea_costo_estimado, 0);
+  return { cantidad: pendientesConCosto.length, total };
+}
+
+const SEMANAS_HECHAS = 2;
+const SEMANAS_PLANIFICADAS = 6;
+
+/**
+ * Throughput semanal: las últimas `SEMANAS_HECHAS` semanas (bloques de 7 días que terminan hoy)
+ * con las tareas completadas en cada una, y las próximas `SEMANAS_PLANIFICADAS` (bloques de 7
+ * días desde mañana) con las tareas sin completar cuya fecha sugerida o, si no tiene, su
+ * fecha límite cae en ese bloque.
+ */
+function calcularThroughputSemanal() {
+  const hoy = hoyISO();
+  const semanas = [];
+  for (let i = SEMANAS_HECHAS - 1; i >= 0; i--) {
+    const fin = fechaISOMasDias(-7 * i, hoy);
+    const inicio = fechaISOMasDias(-7 * i - 6, hoy);
+    const cantidad = estado.tareas.filter(
+      (t) =>
+        t.tarea_estado === 'completada' &&
+        t.tarea_fecha_fin &&
+        diaLocal(t.tarea_fecha_fin) >= inicio &&
+        diaLocal(t.tarea_fecha_fin) <= fin
+    ).length;
+    semanas.push({ inicio, fin, cantidad, planificada: false });
+  }
+  for (let i = 0; i < SEMANAS_PLANIFICADAS; i++) {
+    const inicio = fechaISOMasDias(1 + 7 * i, hoy);
+    const fin = fechaISOMasDias(7 + 7 * i, hoy);
+    const cantidad = estado.tareas.filter((t) => {
+      if (!ESTADOS_ACTIVOS.includes(t.tarea_estado)) return false;
+      const fecha = fechaDeReferencia(t);
+      return fecha && fecha >= inicio && fecha <= fin;
+    }).length;
+    semanas.push({ inicio, fin, cantidad, planificada: true });
+  }
+  return semanas;
+}
+
+/** Fecha corta (dd/mm) para el eje del gráfico. */
+function fechaCorta(iso) {
+  return formatearFecha(iso).slice(0, 5);
+}
+
+/** Solapa "Resumen": completadas vs. pendientes, costos y throughput semanal. */
+function renderResumen(contenedor) {
+  const desde = fechaISOMasDias(-(DIAS_VENTANA - 1), hoyISO());
+  const porCategoria = calcularPorCategoria(desde);
+  const proyeccionCostos = calcularProyeccionCostos();
+  const throughput = calcularThroughputSemanal();
+  const maxThroughput = Math.max(1, ...throughput.map((s) => s.cantidad));
+  const totalHechas = throughput.filter((s) => !s.planificada).reduce((suma, s) => suma + s.cantidad, 0);
+  const totalPlanificadas = throughput.filter((s) => s.planificada).reduce((suma, s) => suma + s.cantidad, 0);
+  const comparacion = compararEstimadoVsReal(estado.cumplimientos).sort((a, b) => b.cantidad - a.cantidad);
+  const nombreCategoria = (id) => (estado.categorias.find((c) => c.categoria_id === id) || {}).categoria_nombre || 'Sin categoría';
+
+  contenedor.innerHTML = `
+    <p class="ayuda">Calculados sobre los últimos ${DIAS_VENTANA} días. Es un primer corte simple, no un histórico completo de eventos.</p>
+
+    <section>
+      <h3>📊 Completadas vs. pendientes por categoría</h3>
+      ${
+        porCategoria.length === 0
+          ? '<p class="mensaje-vacio">Todavía no hay tareas completadas ni pendientes para mostrar.</p>'
+          : `<table class="tabla-informe">
+              <thead>
+                <tr><th>Categoría</th><th>Completadas (${DIAS_VENTANA}d)</th><th>Pendientes ahora</th></tr>
+              </thead>
+              <tbody>
+                ${porCategoria
+                  .map(
+                    (f) => `
+                      <tr>
+                        <td><span class="punto-color" style="background:${f.color}"></span>${escaparHtml(f.nombre)}</td>
+                        <td>${f.completadas}</td>
+                        <td>${f.pendientes}</td>
+                      </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>`
+      }
+    </section>
+
+    <section>
+      <h3>💰 Costos</h3>
+      ${
+        proyeccionCostos.cantidad === 0
+          ? '<p class="mensaje-vacio">No hay tareas pendientes con costo estimado cargado.</p>'
+          : `<p class="notas-tarea">
+              Costo estimado de tus tareas pendientes: <strong>$${proyeccionCostos.total}</strong>
+              (sobre ${proyeccionCostos.cantidad} tarea(s) con costo cargado).
+            </p>`
+      }
+    </section>
+
+    <section>
+      <h3>🚀 Throughput semanal</h3>
+      ${
+        totalHechas === 0 && totalPlanificadas === 0
+          ? '<p class="mensaje-vacio">Todavía no hay tareas completadas ni planificadas para mostrar.</p>'
+          : `<div class="throughput-semanal">
+              ${throughput
+                .map(
+                  (s) => `
+                    <div class="barra-throughput-item">
+                      <span class="barra-throughput-valor">${s.cantidad}</span>
+                      <div class="barra-throughput${s.planificada ? ' planificada' : ''}" style="height:${(s.cantidad / maxThroughput) * 100}%" title="${s.planificada ? 'Planificadas' : 'Completadas'} del ${formatearFecha(s.inicio)} al ${formatearFecha(s.fin)}"></div>
+                      <span class="barra-throughput-etiqueta">${fechaCorta(s.inicio)}</span>
+                    </div>`
+                )
+                .join('')}
+            </div>
+            <p class="ayuda leyenda-throughput"><span class="muestra-throughput"></span> completadas (últimas ${SEMANAS_HECHAS} semanas) · <span class="muestra-throughput planificada"></span> planificadas (próximas ${SEMANAS_PLANIFICADAS} semanas, por fecha sugerida o límite). Cada barra es una semana y se rotula con su primer día.</p>
+            <p class="ayuda">Completadas: ${(totalHechas / SEMANAS_HECHAS).toFixed(1)} tarea(s)/semana en las últimas ${SEMANAS_HECHAS} semanas. Planificadas: ${(totalPlanificadas / SEMANAS_PLANIFICADAS).toFixed(1)} tarea(s)/semana en las próximas ${SEMANAS_PLANIFICADAS}.</p>`
+      }
+    </section>
+
+    ${
+      comparacion.length === 0
+        ? ''
+        : `<section>
+      <h3>⏱️ Estimado vs. real</h3>
+      <p class="ayuda">Con los tiempos que anotaste al completar tareas. «Factor» = real ÷ estimado: más de 1 significa que tardás más de lo que estimás. Con 3 o más registros por categoría podés ajustar las duraciones de sus tareas pendientes (te pide confirmación).</p>
+      <ul class="barras-calendar-pasado">
+        ${comparacion
+          .map(
+            (g) => `<li><span class="barra-calendar-etiqueta">${escaparHtml(nombreCategoria(g.categoriaId))}</span><span class="barra-calendar-valor">${g.cantidad} registro${g.cantidad === 1 ? '' : 's'} · estimado ${Math.round(g.estimado / g.cantidad)} min · real ${Math.round(g.real / g.cantidad)} min · factor ${g.factor.toFixed(2)}</span>${
+              g.cantidad >= 3 && Math.abs(g.factor - 1) >= 0.15
+                ? `<button type="button" data-ajustar-categoria="${escaparHtml(g.categoriaId)}" data-factor="${g.factor.toFixed(2)}" title="Multiplicar por ${g.factor.toFixed(2)} la duración de las tareas pendientes de esta categoría">Ajustar ×${g.factor.toFixed(2)}</button>`
+                : '<span></span>'
+            }</li>`
+          )
+          .join('')}
+      </ul>
+    </section>`
+    }
+  `;
+
+  contenedor.querySelectorAll('[data-ajustar-categoria]').forEach((boton) =>
+    boton.addEventListener('click', async () => {
+      const categoriaId = boton.dataset.ajustarCategoria;
+      const factor = Number(boton.dataset.factor);
+      const afectadas = estado.tareas.filter((t) => t.tarea_estado !== 'completada' && (t.categoria_id || '') === categoriaId).length;
+      if (afectadas === 0) {
+        await avisar('Esa categoría no tiene tareas pendientes para ajustar.');
+        return;
+      }
+      if (!(await confirmar(`Se va a multiplicar por ${factor.toFixed(2)} la duración de las ${afectadas} tarea${afectadas === 1 ? '' : 's'} pendiente${afectadas === 1 ? '' : 's'} de «${nombreCategoria(categoriaId)}» (redondeada a 5 minutos). Se puede deshacer con Ctrl+Z.`, { titulo: '⏱️ Ajustar duraciones', textoAceptar: 'Ajustar' }))) return;
+      const cambiadas = aplicarFactorADuraciones(estado.tareas, categoriaId, factor);
+      await persistirYNotificar();
+      await avisar(`Se ajustó la duración de ${cambiadas} tarea${cambiadas === 1 ? '' : 's'}.`);
+    })
+  );
+}
+
+// Solapas internas de Estadísticas. La activa se recuerda mientras la página está abierta.
+const SOLAPAS = [
+  { clave: 'resumen', ayuda: 'Completadas, costos y tareas por semana', etiqueta: '🧮 Resumen', render: renderResumen },
+  { clave: 'progreso', ayuda: 'Cuánto falta en cada categoría y cuándo vence', etiqueta: '🎯 Progreso por categoría', render: renderVistaProgreso },
+  { clave: 'habitos', ayuda: 'Mapa de las tareas que se repiten y de la actividad por categoría', etiqueta: '🔥 Hábitos', render: renderVistaHabitos },
+  { clave: 'calendar', ayuda: 'Qué pasó realmente en tu Google Calendar en los últimos días', etiqueta: '📅 Calendar', render: renderVistaCalendarPasado },
+];
+let solapaActiva = 'resumen';
+
+export function renderVistaEstadisticas(contenedor) {
+  contenedor.innerHTML = `
+    <div class="barra-titulo">
+      <h2>📈 Estadísticas</h2>
+      <div class="solapas" role="tablist">
+        ${SOLAPAS.map((sol) => `<button type="button" role="tab" title="${sol.ayuda}" data-solapa="${sol.clave}" aria-selected="${sol.clave === solapaActiva}" class="${sol.clave === solapaActiva ? 'activa' : ''}">${sol.etiqueta}</button>`).join('')}
+      </div>
+    </div>
+    <div class="contenido-solapa"></div>
+  `;
+  contenedor.querySelectorAll('.solapas button').forEach((boton) => {
+    boton.addEventListener('click', () => {
+      solapaActiva = boton.dataset.solapa;
+      renderVistaEstadisticas(contenedor);
+    });
+  });
+  SOLAPAS.find((sol) => sol.clave === solapaActiva).render(contenedor.querySelector('.contenido-solapa'));
+}

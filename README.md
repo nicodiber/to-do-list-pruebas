@@ -1,0 +1,46 @@
+# Super To-Do List
+
+Plataforma personal de gestión de tareas y objetivos, pensada para asistir y priorizar automáticamente qué hacer ahora y evitar reprogramación manual de fechas.
+
+La visión completa está en [SPEC.md](SPEC.md), el backlog de funcionalidades futuras en [BACKLOG.md](BACKLOG.md), el modelo de datos en [DICCIONARIO_DE_DATOS.md](DICCIONARIO_DE_DATOS.md), las tecnologías utilizadas en [TECNOLOGIAS.md](TECNOLOGIAS.md) y las notas originales del brainstorm en [NOTAS_ORIGINALES.md](NOTAS_ORIGINALES.md).
+
+Documentación de cómo funciona: [CASOS_DE_USO.md](CASOS_DE_USO.md) (flujos de usuario, foto de hoy), [PROCESOS_AUTOMATICOS.md](PROCESOS_AUTOMATICOS.md) (lo que el sistema hace solo), [REGLAS_DE_PRIORIDAD.md](REGLAS_DE_PRIORIDAD.md) (cómo se ordenan las tareas), [LOGICA_FUNCIONES.md](LOGICA_FUNCIONES.md) (qué hace cada función) y [REDISENO.md](REDISENO.md) (lo acordado para cambiar).
+
+## Estado actual
+
+**v0.107.3.** Gestión de tareas con categorías jerárquicas, dependencias (encadenadas también reordenables a mano), tareas con repetición cíclicas (cada N días/semanas/meses desde que se cumplen o en un día fijo, con «día obligatorio» opcional), algoritmo de prioridad (accionable + fecha límite más próxima, con la categoría desempatando solo sin fecha límite o en un empate exacto, con desempate manual "Versus" y reordenar a mano con ▲▼), selección múltiple, edición y eliminación masiva (en Tabla y Gantt), deshacer/rehacer (Ctrl+Z), programación automática de día y hora (respetando tus horarios disponibles por día (uno o varios bloques «desde–hasta»), Google Calendar (si no puede leerlo, no asigna nada hasta lograrlo, para no pisar tus eventos) y las demás tareas ya agendadas, para que nunca queden dos con el mismo horario; agenda las cadenas sin hora según su orden y duración real, reprograma las vencidas al primer hueco real desde hoy, nunca deja una tarea activa sin fecha y hora sugerida (si no hay hueco antes del límite la agenda después y la marca), agenda según el orden de la Tabla (Holgura: una bloqueada con límite va entre su previa y las tareas sin límite), reordena los horarios ya asignados cuando una tarea de mayor prioridad quedó detrás de una de menor prioridad, reubica o adelanta sola una tarea si Calendar cambia y mantiene una tarea urgente siempre agendada para hoy (todos los días, mientras siga sin completar), sin tocar nunca la fecha límite de nadie — todo esto no solo al iniciar sesión, también al sincronizar, volver a la pestaña o cada 5 minutos), plantillas de cadenas (un procedimiento típico se carga en pocos pasos: categoría + fecha límite final), menú lateral de módulos (compactable), vistas Resumen / Agenda / Semana (con pronóstico del tiempo, amanecer/atardecer y degradé de temperatura o lluvia) / Gantt / Tabla / Estadísticas, delegaciones con seguimiento, memento mori, recordatorio de copia de seguridad, sonidos sintetizados y animaciones suaves (se pueden apagar), dictado de tareas por voz, clima que sigue tu ubicación, horarios que fijás vos (📌, STDL no los mueve), asistente de IA por texto o voz con tu propia clave de Anthropic (propone y vos aprobás cada cambio), cronómetro por tarea, exportar a CSV, almacenamiento en Google Drive (único destino, con sincronización entre dispositivos y renovación silenciosa de la sesión), avisos y preguntas dentro de la app (sin los cuadros del navegador) e integración con Google Calendar. Con datos reales cargados desde la v0.63.0; el desarrollo sigue por ajustes y rondas más chicas sobre la marcha. Ver [CHANGELOG.md](CHANGELOG.md).
+
+## Cómo correrlo
+
+Es una app 100% cliente, sin instalación ni backend:
+
+1. **Web**: https://nicodiber.github.io/to-do-list/ (instalable como PWA en PC y celular).
+2. La primera vez, la app pide **conectar con Google** (un solo permiso para Drive y Calendar de solo lectura). Sin conexión a Drive no se pueden cargar tareas.
+
+Usá un navegador moderno (Chrome, Edge, Safari o Firefox). La app usa IndexedDB, Web Locks y Google Identity Services.
+
+## Cómo funciona la persistencia y la sincronización
+
+- **Google Drive es el único destino de los datos**, en todos los dispositivos: un archivo `super-todo-list-datos.json` en tu Drive (la app solo ve los archivos que ella misma crea; permiso `drive.file`). No hace falta la app de escritorio de Drive ni elegir carpetas.
+- **Nada se pierde en silencio**: cada cambio se guarda de inmediato en un buffer local del navegador (IndexedDB), se sube a Drive a los ~2 segundos y **recién cuando Drive confirma** la cabecera muestra "✅ Sincronizado" con la hora. Si se corta internet o vence la sesión de Google, los cambios quedan como "⏳ pendiente" y se suben al reconectar; podés seguir editando sin conexión.
+- **Varios dispositivos**: la app verifica Drive al volver a la pestaña, al recuperar internet y cada 5 minutos. Si otro dispositivo cambió algo, lo mezcla por tarea/entidad (gana el cambio más reciente) y, si algo se descartó, deja un **aviso** en la cabecera diciendo qué campo y qué valor, hasta que lo cierres.
+- **Sin conexión al abrir**: se muestra la última copia sincronizada, en solo lectura, con su fecha.
+- `localStorage` guarda solo preferencias (tema, ubicación actual); nunca tus tareas.
+- **"Exportar JSON" / "Importar JSON"** en la cabecera sirven de respaldo manual (importar pide confirmación porque reemplaza todo, también en Drive).
+- Los datos reales **no se versionan** en este repositorio: viven en tu Drive.
+
+## Estructura del proyecto
+
+```
+index.html          Punto de entrada
+assets/css/         Estilos
+assets/js/          Motor de la app: estado, persistencia, modelos, utilidades, router
+views/               Una vista por pantalla (Resumen, Tareas, Categorías)
+datos/               Esquema JSON y datos de ejemplo (versionados); los datos reales no se versionan
+```
+
+Convenciones de desarrollo (idioma, arquitectura, flujo de Git, información para Claude) en [AGENTS.md](AGENTS.md).
+
+## Roadmap
+
+Lo pendiente está en [BACKLOG.md](BACKLOG.md) y lo ya acordado para el rediseño (incluido el cambio de almacenamiento a Google Drive como único destino) en [REDISENO.md](REDISENO.md).

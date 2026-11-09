@@ -1,0 +1,290 @@
+import { generarId, ahoraISO, capitalizarPrimera, diaLocal } from './utilidades.js';
+
+export const ESTADOS_TAREA = ['bloqueada', 'pendiente', 'completada'];
+
+export const ETIQUETAS_ESTADO = {
+  bloqueada: 'Bloqueada',
+  pendiente: 'Pendiente',
+  completada: 'Completada',
+};
+
+export function crearCategoria({
+  categoria_nombre,
+  categoria_descripcion = '',
+  categoria_color = '#4f7cff',
+  categoria_prioridad = 0,
+  categoria_disfrute = 3,
+  categoria_padre_id = null,
+}) {
+  return {
+    categoria_id: generarId(),
+    categoria_nombre: capitalizarPrimera(categoria_nombre),
+    categoria_descripcion,
+    categoria_color,
+    categoria_prioridad,
+    categoria_disfrute,
+    categoria_padre_id: categoria_padre_id || null,
+  };
+}
+
+export function crearUbicacion({ ubicacion_nombre, ubicacion_latitud, ubicacion_longitud }) {
+  return { ubicacion_id: generarId(), ubicacion_nombre: capitalizarPrimera(ubicacion_nombre), ubicacion_latitud, ubicacion_longitud };
+}
+
+export function crearPersona({
+  persona_nombre,
+  persona_ultimo_contacto = '',
+  persona_proximo_contacto = '',
+  persona_etiqueta_id = null,
+  persona_fallecida = false,
+}) {
+  return {
+    persona_id: generarId(),
+    persona_nombre: capitalizarPrimera(persona_nombre),
+    persona_ultimo_contacto,
+    persona_proximo_contacto,
+    persona_etiqueta_id: persona_etiqueta_id || null,
+    persona_fallecida,
+    persona_creada_en: ahoraISO(),
+  };
+}
+
+/**
+ * Plantilla de cadena (v0.99.0): un procedimiento típico como grupo de tareas encadenadas. `plantilla_pasos` va en el
+ * orden de la cadena (el primero se hace primero; el último es la tarea objetivo). Cada paso guarda los atributos que
+ * se copian a cada tarea al usar la plantilla — la categoría y las fechas se piden al usarla.
+ */
+export function crearPasoPlantilla({
+  paso_nombre,
+  paso_duracion_min = 15,
+  paso_descripcion = '',
+  paso_dias_antes = 0,
+  paso_dias_habiles = [],
+  paso_costo_estimado = 0,
+  paso_disfrute = null,
+  paso_requiere_clima_bueno = false,
+  paso_urgente = false,
+}) {
+  return {
+    paso_nombre: capitalizarPrimera(paso_nombre),
+    paso_duracion_min,
+    paso_descripcion,
+    paso_dias_antes,
+    paso_dias_habiles,
+    paso_costo_estimado,
+    paso_disfrute,
+    paso_requiere_clima_bueno,
+    paso_urgente,
+  };
+}
+
+export function crearPlantilla({ plantilla_nombre, plantilla_descripcion = '', plantilla_pasos = [] }) {
+  return {
+    plantilla_id: generarId(),
+    plantilla_nombre: capitalizarPrimera(plantilla_nombre),
+    plantilla_descripcion,
+    plantilla_pasos,
+    plantilla_creada_en: ahoraISO(),
+  };
+}
+
+/** Etiqueta compartida (v0.91.0): nombre + color, para agrupar/distinguir visualmente personas. */
+export function crearEtiqueta({ etiqueta_nombre, etiqueta_color = '#4f7cff' }) {
+  return {
+    etiqueta_id: generarId(),
+    etiqueta_nombre: capitalizarPrimera(etiqueta_nombre),
+    etiqueta_color,
+    etiqueta_creada_en: ahoraISO(),
+  };
+}
+
+export const PLAZOS_META = ['corto', 'mediano', 'largo'];
+
+export const ETIQUETAS_PLAZO = {
+  corto: 'Corto plazo',
+  mediano: 'Mediano plazo',
+  largo: 'Largo plazo',
+};
+
+export function crearMeta({ meta_nombre, meta_plazo = 'mediano', meta_descripcion = '', meta_fecha_estimada = '' }) {
+  return {
+    meta_id: generarId(),
+    meta_nombre: capitalizarPrimera(meta_nombre),
+    meta_plazo,
+    meta_descripcion,
+    meta_fecha_estimada,
+    meta_creada_en: ahoraISO(),
+  };
+}
+
+export const UNIDADES_MANTENIMIENTO = ['dias', 'semanas', 'meses'];
+
+export const ETIQUETAS_UNIDAD_MANTENIMIENTO = {
+  dias: 'día(s)',
+  semanas: 'semana(s)',
+  meses: 'mes(es)',
+};
+
+/**
+ * Fecha a la que "le toca" una tarea de mantenimiento (v0.101.0): su fecha límite si tiene; si no, el objetivo de la
+ * repetición (`tarea_mantenimiento_objetivo`: el día calculado al crear la copia, que no se mueve cuando el agendado
+ * le cambia la hora) y, como último recurso, el día de su fecha sugerida. `''` si no hay ninguna.
+ */
+export function fechaObjetivoMantenimiento(tarea) {
+  if (tarea.tarea_fecha_limite) return diaLocal(tarea.tarea_fecha_limite);
+  if (tarea.tarea_mantenimiento_objetivo) return tarea.tarea_mantenimiento_objetivo;
+  return tarea.tarea_fecha_sugerida ? diaLocal(tarea.tarea_fecha_sugerida) : '';
+}
+
+export function crearTarea({
+  tarea_nombre,
+  categoria_id = null,
+  tarea_estado = 'pendiente',
+  tarea_fecha_inicio_habilitada = '',
+  tarea_fecha_sugerida = '',
+  tarea_fecha_limite = '',
+  tarea_urgente = false,
+  tarea_mantenimiento = false,
+  tarea_mantenimiento_intervalo = null,
+  tarea_mantenimiento_dia_fijo = null,
+  tarea_mantenimiento_objetivo = '',
+  tarea_dia_obligatorio = false,
+  tarea_dias_habiles = [],
+  tarea_duracion_min = 15,
+  tarea_descripcion = '',
+  tarea_dependiente = null,
+  ubicacion_id = null,
+  tarea_requiere_clima_bueno = false,
+  tarea_costo_estimado = 0,
+  meta_id = null,
+  persona_id = null,
+  tarea_delegada_a = null,
+  tarea_fecha_fija = false,
+  tarea_horario_preferido = '',
+  tarea_cronometro_inicio = null,
+  tarea_tiempo_acumulado_min = 0,
+  tarea_seguimiento_fecha = '',
+  tarea_prioridad_manual = null,
+  tarea_disfrute = null,
+  tarea_exportada_calendar = false,
+  tarea_checklist = [],
+  tarea_desencadenante = null,
+  tarea_carga_completa = false,
+  tarea_tipo = '',
+  tarea_repetir_hasta = '',
+  tarea_repetir_hasta_tarea = null,
+  tarea_origen = null,
+}) {
+  const creadaEn = ahoraISO();
+  return {
+    tarea_id: generarId(),
+    tarea_nombre: capitalizarPrimera(tarea_nombre),
+    categoria_id: categoria_id || null,
+    tarea_estado,
+    tarea_fecha_inicio_habilitada: tarea_fecha_inicio_habilitada || creadaEn,
+    tarea_fecha_sugerida,
+    tarea_fecha_limite,
+    tarea_fecha_fin: null,
+    tarea_urgente: !!tarea_urgente,
+    tarea_mantenimiento,
+    tarea_mantenimiento_intervalo,
+    tarea_mantenimiento_dia_fijo,
+    tarea_mantenimiento_objetivo,
+    tarea_dia_obligatorio: !!tarea_dia_obligatorio,
+    tarea_dias_habiles,
+    tarea_duracion_min,
+    tarea_descripcion,
+    tarea_creada_en: creadaEn,
+    tarea_dependiente: tarea_dependiente || null,
+    ubicacion_id: ubicacion_id || null,
+    tarea_requiere_clima_bueno,
+    tarea_costo_estimado,
+    meta_id: meta_id || null,
+    persona_id: persona_id || null,
+    tarea_delegada_a: tarea_delegada_a || null,
+    tarea_fecha_fija: !!tarea_fecha_fija && !!tarea_fecha_sugerida && tarea_fecha_sugerida.includes('T'),
+    tarea_horario_preferido: ['manana', 'tarde', 'noche'].includes(tarea_horario_preferido) ? tarea_horario_preferido : '',
+    tarea_cronometro_inicio: tarea_cronometro_inicio || null,
+    tarea_tiempo_acumulado_min: Number(tarea_tiempo_acumulado_min) > 0 ? Number(tarea_tiempo_acumulado_min) : 0,
+    tarea_seguimiento_fecha: tarea_delegada_a ? tarea_seguimiento_fecha || '' : '',
+    tarea_prioridad_manual,
+    tarea_disfrute,
+    tarea_exportada_calendar,
+    tarea_checklist,
+    tarea_desencadenante: tarea_desencadenante || null,
+    tarea_carga_completa,
+    tarea_tipo,
+    tarea_repetir_hasta,
+    tarea_repetir_hasta_tarea: tarea_repetir_hasta_tarea || null,
+    tarea_origen,
+  };
+}
+
+/**
+ * Nota de mejora ("¿cómo se podría mejorar la próxima vez?") de una tarea de
+ * mantenimiento. Se asocia al nombre de la tarea, no a una instancia, para
+ * que sobreviva cuando las instancias completadas se archiven.
+ */
+export function crearMejora({ mejora_tarea_nombre, mejora_texto }) {
+  return {
+    mejora_id: generarId(),
+    mejora_tarea_nombre,
+    mejora_texto,
+    mejora_fecha: ahoraISO(),
+    mejora_aplicada: false,
+  };
+}
+
+/**
+ * Registro liviano de que una tarea se cumplió (base del mapa de hábitos).
+ * Guarda lo necesario para no depender de que la tarea siga existiendo.
+ */
+export function crearCumplimiento({ tarea, fecha }) {
+  return {
+    cumplimiento_id: generarId(),
+    cumplimiento_tarea_id: tarea.tarea_id,
+    cumplimiento_tarea_nombre: tarea.tarea_nombre,
+    categoria_id: tarea.categoria_id || null,
+    cumplimiento_fecha: fecha,
+    cumplimiento_fecha_limite: tarea.tarea_mantenimiento ? fechaObjetivoMantenimiento(tarea) : tarea.tarea_fecha_limite || '',
+    cumplimiento_mantenimiento: !!tarea.tarea_mantenimiento,
+    // Cada cuánto se repetía y qué días se podía hacer al cumplirla: hacen falta para saber, más tarde,
+    // si un día sin registro fue un incumplimiento (hábito diario) o simplemente no tocaba.
+    cumplimiento_intervalo: tarea.tarea_mantenimiento_intervalo ? { ...tarea.tarea_mantenimiento_intervalo } : null,
+    // v0.104.0: cuánto se estimó y (si el usuario lo contó) cuánto tardó de verdad, en minutos.
+    cumplimiento_duracion_estimada: tarea.tarea_duracion_min || null,
+    cumplimiento_duracion_real: null,
+    cumplimiento_dias_habiles: [...(tarea.tarea_dias_habiles || [])],
+  };
+}
+
+/** Preferencias por defecto (Ronda 9b): tiempo disponible por día y cómo se lee Calendar. */
+export const PREFERENCIAS_POR_DEFECTO = {
+  pref_tope_dias: [1440, 1440, 1440, 1440, 1440, 1440, 1440],
+  pref_franja: { inicio: '00:00', fin: '24:00' },
+  pref_calendarios: null,
+  pref_ignorar_todo_el_dia: true,
+  pref_ignorar_rechazados: true,
+  pref_ignorar_disponible: true,
+  pref_horizonte_dias: 90,
+  pref_capacidad_por_fecha: {},
+  pref_ubicacion_clima: null,
+  pref_habitos_ocultos: [],
+  pref_preguntar_tiempo_real: false,
+  pref_bloques_dias: null,
+  pref_fecha_nacimiento: '',
+  pref_esperanza_vida: 80,
+};
+
+/**
+ * Las preferencias del usuario: un único registro (`preferencias_id: 'unica'`) que se sincroniza con Drive para que
+ * valgan en todos los dispositivos. Los campos que falten toman el valor por defecto.
+ */
+export function crearPreferencias(campos = {}) {
+  return {
+    preferencias_id: 'unica',
+    preferencias_nombre: 'Preferencias',
+    ...structuredClone(PREFERENCIAS_POR_DEFECTO),
+    ...campos,
+  };
+}

@@ -1,0 +1,214 @@
+# Diccionario de datos
+
+Referencia 1:1 con [datos/esquema.json](datos/esquema.json) y con las factories de [assets/js/modelos.js](assets/js/modelos.js).
+
+Convención de nombres: cada campo propio de una entidad se prefija con el nombre de la entidad (patrón `entidad_atributo`, ej. `Tarea.nombre` → `tarea_nombre`), para evitar ambigüedad cuando una entidad referencia atributos de otra. Los campos que ya son una referencia a otra entidad (`categoria_id`, `ubicacion_id`, `tarea_dependiente`, `meta_id`) quedan sin ese prefijo, porque ya son inequívocos.
+
+Convención de fecha±hora: los campos de fecha de Tarea (`tarea_fecha_inicio_habilitada`, `tarea_fecha_sugerida`, `tarea_fecha_limite`) admiten dos formatos en el mismo campo — un string de 10 caracteres (`YYYY-MM-DD`) significa "sin hora específica" (día nomás); un datetime ISO completo (más de 10 caracteres) significa que además hay una hora puntual. Se distingue por longitud del string. `null` significa "sin valor". **Zona horaria**: un valor con hora es un instante en UTC (`toISOString()`) que la app muestra y agrupa por día en la **hora local del dispositivo** (en Argentina, UTC-3 todo el año); un valor de solo fecha es un día del calendario, sin zona. El día de un instante se obtiene con `diaLocal` (`assets/js/utilidades.js`), nunca cortando el texto, porque el día UTC de las 21:00 a las 24:00 locales ya es el siguiente. Las horas se muestran en 24 h.
+
+## Categoria
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `categoria_id` | string (UUID) | MVP | Identificador único |
+| `categoria_nombre` | string | MVP | Nombre de la categoría (ej. "Personal", "Facultad", "IR") |
+| `categoria_descripcion` | string, default `""` | MVP | Texto libre opcional |
+| `categoria_color` | string (hex) | MVP | Color identificatorio en la UI de esta categoría (no de sus ancestros) |
+| `categoria_prioridad` | number | MVP | Prioridad relativa entre categorías **hermanas** (mismo `categoria_padre_id`). Se reordena con los botones ▲/▼ en la vista Categorías |
+| `categoria_disfrute` | number (1-5, default `3`) | MVP | Cuánto disfrutás las tareas de esta categoría. Por ahora solo se recolecta, sin ningún efecto en la app: la sugerencia automática basada en el principio de Premack se eliminó y se retoma post-v1.0, cuando haya datos reales cargados para analizar (ver `BACKLOG.md`) |
+| `categoria_padre_id` | string (UUID) \| null | MVP | Categoría padre, si esta es una categoría anidada (reemplaza al viejo concepto de Subcategoria — ahora Categoria se auto-referencia, sin límite de profundidad). `null` = categoría raíz |
+| `categoria_modificado_en` | string (ISO datetime) | MVP | Cuándo se modificó por última vez (lo sella el sistema al guardar, ver "Sincronización" abajo). No se edita a mano |
+
+El "camino" completo de una categoría hasta su raíz (ej. "Facultad / IR") se arma recorriendo `categoria_padre_id` en tiempo de renderizado (`caminoCategoria` en `assets/js/utilidades.js`), no se guarda como campo. Al eliminar una categoría, sus categorías hijas quedan promovidas (`categoria_padre_id: null`) y las tareas asociadas quedan sin categoría.
+
+## Tarea
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `tarea_id` | string (UUID) | MVP | Identificador único |
+| `tarea_nombre` | string | MVP | Título de la tarea |
+| `categoria_id` | string (UUID) \| null | MVP | Referencia a `Categoria.categoria_id` (puede ser cualquier nivel del árbol) |
+| `tarea_estado` | enum: `bloqueada` \| `pendiente` \| `completada` | MVP | Estado actual. `bloqueada` es un valor persistido (no calculado): la tarea tiene `tarea_dependiente` apuntando a otra que todavía no está `completada`. Se recalcula automáticamente al crear la tarea, al editar/quitar su dependencia, y al completarse la tarea de la que depende |
+| `tarea_fecha_inicio_habilitada` | fecha±hora \| null, default = `tarea_creada_en` | MVP | A partir de cuándo se puede empezar (earliest start). En Hoy, las tareas con esta fecha en el futuro se muestran aparte, en "Todavía no pueden empezar" |
+| `tarea_fecha_sugerida` | fecha±hora \| null | MVP | Cuándo conviene/se planea hacer la tarea — sin hora es una sugerencia laxa; con hora es un horario concreto (reemplaza al viejo campo separado `fecha_hora_agendada`). Se define con el botón "Posponer". Idealmente entre `tarea_fecha_inicio_habilitada` y `tarea_fecha_limite` |
+| `tarea_fecha_limite` | fecha±hora \| null | MVP | Fecha en la que la tarea debe estar completada sí o sí (deadline) |
+| `tarea_fecha_fin` | string (ISO datetime) \| null | MVP | Timestamp real de finalización (se completa al marcar la tarea como `completada`) |
+| `tarea_urgente` | boolean (default `false`) | MVP | Si es urgente. Se usa en `REGLAS_DE_PRIORIDAD.md`; al marcarla en `true` se le asigna `tarea_fecha_sugerida` = hoy (o el próximo hueco libre si no entra). Antes de la v0.75.0 era `tarea_importancia` (enum `urgente`/`importante`/`null`) |
+| `tarea_mantenimiento` | boolean (default `false`) | MVP | Si está en `true`, habilita la carga de `tarea_mantenimiento_intervalo` y, al completar la tarea, se clona una nueva instancia pendiente con `tarea_fecha_limite` = fecha real de finalización + ese intervalo **Desde la v0.101.0** la copia nace con `tarea_fecha_sugerida` (el día que le toca) y sin `tarea_fecha_limite` (salvo con `tarea_dia_obligatorio`) |
+| `tarea_mantenimiento_intervalo` | `{ cantidad: number, unidad: 'dias'\|'semanas'\|'meses' }` \| null | MVP | Cada cuánto se repite. Solo tiene sentido cuando `tarea_mantenimiento = true`. Queda en `null` si la repetición es en día fijo (`tarea_mantenimiento_dia_fijo`) |
+| `tarea_dias_habiles` | array de números 0-6 (0=domingo), default `[]` | MVP | Días de la semana en que se puede realizar. Vacío = sin restricción. Al posponer, el panel de reprogramar salta automáticamente al próximo día hábil |
+| `tarea_duracion_min` | number (múltiplo de 15, default `15`) | MVP | Duración estimada en minutos. Hasta la v0.59 el valor por defecto era 15; las tareas ya cargadas no cambian |
+| `tarea_descripcion` | string, default `""` | MVP | Texto libre: recursos, procedimiento, links, referencias |
+| `tarea_creada_en` | string (ISO datetime) | MVP | Timestamp de creación |
+| `tarea_dependiente` | string (UUID) \| null | MVP | Referencia a la `Tarea.tarea_id` de la que depende (una sola; es la tarea **previa**). **Regla 1 a 1**: cada tarea bloquea a como máximo una tarea activa y es bloqueada por como máximo una (se permite entre categorías distintas); al enlazar con una tarea ya enlazada, la nueva se inserta en medio (P→A→N). Mientras esa tarea no esté `completada`, esta queda `bloqueada`. Al completarse la tarea de la que depende, esta se desbloquea (`tarea_estado` pasa a `pendiente`) y su `tarea_fecha_inicio_habilitada` toma el `tarea_fecha_fin` de la completada |
+| `ubicacion_id` | string \| null | MVP | Referencia a la única `Ubicacion.ubicacion_id` donde puede realizarse la tarea. Útil para validar `tarea_requiere_clima_bueno` |
+| `tarea_requiere_clima_bueno` | boolean (default `false`) | MVP | Si está en `true` y la tarea tiene `ubicacion_id` con coordenadas y una fecha resoluble dentro de los próximos 16 días, se consulta el pronóstico real (Open-Meteo) y se avisa si la probabilidad de lluvia es alta |
+| `tarea_costo_estimado` | number, default `0` | MVP | Costo monetario estimado, opcional. Se suma en Informes para proyectar el costo de las tareas pendientes. Se copia a la instancia clonada si la tarea es de mantenimiento |
+| `meta_id` | string (UUID) \| null | MVP | Meta a la que aporta esta tarea (una sola). El progreso de la meta se calcula al vuelo filtrando por este campo |
+| `tarea_disfrute` | number (1-5) \| null, default `null` | MVP | Cuánto disfrutás esta tarea puntual (principalmente útil en tareas de mantenimiento). Por ahora solo se recolecta, sin efecto en la app — mismo criterio que `categoria_disfrute` (ver `BACKLOG.md`, Premack post-v1.0). Se copia a la instancia clonada si la tarea es de mantenimiento. **Desde la v0.100.0**: si es `null`, cuenta el `categoria_disfrute` de su categoría (se calcula al leer con `disfruteEfectivo`; no se guarda en la tarea) |
+| `tarea_modificado_en` | string (ISO datetime) | MVP | Cuándo se modificó por última vez (lo sella el sistema al guardar). No se edita a mano |
+| `tarea_prioridad_manual` | number \| null, default `null` | MVP | Desempate manual de prioridad (menor = más prioritaria), asignado por la herramienta "Versus" (vista Tabla) al comparar 2 tareas empatadas. `null` = sin preferencia manual. Ver `REGLAS_DE_PRIORIDAD.md` |
+| `tarea_exportada_calendar` | boolean (default `false`) | MVP | Se marca al aceptar abrir la tarea completada en Google Calendar (no se puede verificar que el usuario haya guardado el evento). Vuelve a `false` al reabrir la tarea; la copia de una tarea de mantenimiento nace en `false` |
+| `tarea_checklist` | array de `{ texto: string, hecho: boolean }`, default `[]` | MVP | Lista de pasos para definir el proceso de una tarea de mantenimiento. La copia que se crea al completar hereda los textos con `hecho: false` (destildados). Todavía no tiene pantalla de edición (llega en la Ronda 3 del rediseño) |
+| `tarea_desencadenante` | string (UUID) \| null, default `null` | MVP | Solo tareas de mantenimiento. Referencia a otra tarea que "activa" a esta: no bloquea nada por sí mismo, se aplica **al crear la copia** (al completar esta tarea, su copia nace bloqueada por la instancia vigente del desencadenante; la instancia vigente es la misma tarea si sigue sin completar o su copia de mantenimiento pendiente con el mismo nombre). Sirve para cerrar anillos (A→B→C→D y D vuelve a activar a A). Una tarea con desencadenante no admite otra tarea previa; la copia sí nace con `tarea_dependiente` apuntando a él. Si se elimina el desencadenante, pasa a la previa de la eliminada |
+| `tarea_carga_completa` | boolean (default `false`) | MVP | Se pone en `true` con el botón "Dejar así" de "Completar carga de tareas": la tarea queda con pocos datos a propósito y deja de figurar en esa lista. No afecta nada más |
+| `tarea_tipo` | string, default `""` | Ronda 9a | **Reservado, sin uso desde la v0.63.0** (antes marcaba un examen). Se conserva en los datos y no se muestra ni se edita |
+| `tarea_repetir_hasta` | fecha `YYYY-MM-DD` \| `""`, default `""` | Ronda 9a | Solo tareas de mantenimiento: **hábito temporal**. Último día en que se repite; si el próximo vencimiento cae después, no se crea la copia. La copia hereda el valor |
+| `tarea_repetir_hasta_tarea` | string (UUID) \| `null`, default `null` | Ronda 9a | Solo tareas de mantenimiento: deja de repetirse cuando esa otra tarea se cumple o llega su fecha límite (o sugerida). Si esa tarea ya se completó, vale el día de su cumplimiento; si se eliminó, se ignora. Si hay también `tarea_repetir_hasta`, vale lo más temprano. La copia hereda el valor |
+| `tarea_mantenimiento_dia_fijo` | objeto \| `null`, default `null` | v0.101.0 | Solo tareas con repetición: repetición en **día fijo** en lugar de «cada N desde que se cumple». `{ tipo: 'mes', dia: 1-31 }` (ese día de cada mes; en un mes más corto, el último) o `{ tipo: 'semana', dias: [0-6] }` (esos días de la semana, 0 = domingo). Si está cargado, `tarea_mantenimiento_intervalo` queda en `null` |
+| `tarea_mantenimiento_objetivo` | fecha `YYYY-MM-DD` \| `""`, default `""` | v0.101.0 | Solo copias de tareas con repetición: el día que le toca a esa repetición, calculado al crearla. No cambia cuando el agendado le mueve la hora. Sirve para ordenarla (límite blando), para no agendarla antes de ese día y para medir el hábito (`cumplimiento_fecha_limite`) |
+| `tarea_dia_obligatorio` | boolean, default `false` | v0.101.0 | Solo tareas con repetición: «día obligatorio». Su copia nace con ese día también como `tarea_fecha_limite`, el agendado no la mueve de día (`adelantarTareasSiHayHuecoMejor` y `reordenarSugeridasPorPrioridad` la saltean) y su holgura la prioriza sobre las tareas sin fecha |
+| `tarea_origen` | objeto \| `null`, default `null` | Ronda 9a | **Reservado, sin uso desde la v0.63.0** (antes marcaba lo que generó el asistente de examen). Se conserva en los datos; una tarea que lo tiene no cuenta como "cargada rápido" |
+| `persona_id` | string (UUID) \| `null`, default `null` | v0.66.0 | Referencia a `Persona.persona_id`: con quién se hace la tarea (una sola). Al eliminar la persona, queda en `null` |
+| `tarea_delegada_a` | string (UUID) \| `null`, default `null` | v0.105.0 | Referencia a `Persona.persona_id`: a quién se delegó la tarea. Al eliminar la persona, queda en `null` (y se borra el seguimiento) |
+| `tarea_fecha_fija` | boolean, default `false` | v0.106.0 | `true` si la `tarea_fecha_sugerida` (con hora) la puso el usuario: STDL no la mueve hasta que pasa su hora + `tarea_duracion_min` (`fechaFijaVigente`); después es una sugerencia más. Se limpia sola al vencer o si la sugerida pierde la hora. Las tareas anteriores arrancan en `false` |
+| `tarea_horario_preferido` | `""` \| `"manana"` \| `"tarde"` \| `"noche"`, default `""` | v0.107.0 | Franja del día preferida (6–12, 12–18, 18–24): el agendado la intenta primero dentro de los horarios disponibles de ese día y, si no hay lugar, usa el resto del día |
+| `tarea_cronometro_inicio` | datetime ISO \| `null`, default `null` | v0.106.0 | Cuándo se puso en marcha el cronómetro de la tarea (`null` = parado) |
+| `tarea_tiempo_acumulado_min` | number ≥ 0, default `0` | v0.106.0 | Minutos ya medidos por el cronómetro en tramos anteriores; al completar la tarea se anota como `cumplimiento_duracion_real` y vuelve a 0 |
+| `tarea_seguimiento_fecha` | fecha `YYYY-MM-DD` \| `""`, default `""` | v0.105.0 | Solo con `tarea_delegada_a`: el día en que Resumen → Seguimientos muestra la tarea para revisarla |
+
+## Ubicacion
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `ubicacion_id` | string (UUID) | MVP | Identificador único |
+| `ubicacion_nombre` | string | MVP | Nombre de la ubicación (ej. "Casa", "Facultad") |
+| `ubicacion_latitud` | number (-90 a 90) | MVP | Usada para consultar el pronóstico real en Open-Meteo |
+| `ubicacion_longitud` | number (-180 a 180) | MVP | Idem |
+| `ubicacion_modificado_en` | string (ISO datetime) | MVP | Cuándo se modificó por última vez (lo sella el sistema al guardar). No se edita a mano |
+
+Se administra desde el ABM en la vista "Ubicaciones". Al eliminar una ubicación, las tareas que la referenciaban quedan con `ubicacion_id: null`.
+
+## Meta
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `meta_id` | string (UUID) | MVP | Identificador único |
+| `meta_nombre` | string | MVP | Nombre del objetivo/propósito |
+| `meta_plazo` | enum: `corto` \| `mediano` \| `largo` | MVP | Horizonte temporal de la meta |
+| `meta_descripcion` | string, default `""` | MVP | Texto libre opcional |
+| `meta_fecha_estimada` | string (`YYYY-MM-DD`) \| "", opcional | MVP | Fecha en la que se aspira a cumplir la meta |
+| `meta_creada_en` | string (ISO datetime) | MVP | Timestamp de creación |
+| `meta_modificado_en` | string (ISO datetime) | MVP | Cuándo se modificó por última vez (lo sella el sistema al guardar). No se edita a mano |
+
+Se administra desde el ABM en la vista "Metas". El progreso (tareas completadas / tareas asociadas) se calcula al vuelo filtrando `estado.tareas` por `meta_id`, no se guarda como campo. Al eliminar una meta, las tareas que la referenciaban quedan con `meta_id: null`.
+
+## Persona
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `persona_id` | string (UUID) | MVP | Identificador único |
+| `persona_nombre` | string | MVP | Nombre de la persona (ej. "Mamá", "Juan") |
+| `persona_ultimo_contacto` | string (`YYYY-MM-DD`) \| "", opcional | MVP | Fecha del último encuentro/contacto registrado. Vacío = nunca registrado. No puede ser una fecha futura (validado al guardar, v0.91.0) |
+| `persona_proximo_contacto` | string (`YYYY-MM-DD`) \| "", opcional | v0.66.0 | Próximo encuentro planeado. Al guardarla con un valor nuevo, reprograma la `tarea_fecha_sugerida` de todas las tareas pendientes asociadas (`persona_id`) a esa fecha |
+| `persona_etiqueta_id` | string (UUID) \| `null`, default `null` | v0.91.0 | Referencia a `Etiqueta.etiqueta_id`, para agrupar/distinguir personas visualmente (una sola etiqueta por persona). Al eliminar la etiqueta, queda en `null` |
+| `persona_fallecida` | boolean, default `false` | v0.91.0 | Marca a la persona como fallecida: la tarjeta se atenúa, muestra 💀 y la lista la manda siempre al final, sin importar hace cuánto no hay contacto |
+| `persona_creada_en` | string (ISO datetime) | MVP | Timestamp de creación |
+| `persona_modificado_en` | string (ISO datetime) | MVP | Cuándo se modificó por última vez (lo sella el sistema al guardar). No se edita a mano |
+
+Se administra desde el ABM en la vista "Personas". La lista se ordena de mayor a menor tiempo sin contacto, con las fallecidas siempre al final (v0.91.0); el botón "Marcar contacto hoy" actualiza `persona_ultimo_contacto` a la fecha actual, y "☑️ Seleccionar" (v0.91.0) permite aplicar una fecha elegida a varias personas de una vez. Desde la v0.66.0, editar una persona (`abrirDialogoPersona`) muestra sus tareas pendientes (`Tarea.persona_id`) y permite reprogramarlas de una vez con "Próximo contacto".
+
+## Etiqueta
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `etiqueta_id` | string (UUID) | v0.91.0 | Identificador único |
+| `etiqueta_nombre` | string | v0.91.0 | Nombre de la etiqueta (ej. "Familia", "Trabajo") |
+| `etiqueta_color` | string (hex) | v0.91.0 | Color para distinguirla visualmente, elegido con el mismo selector que `Categoria.categoria_color` |
+| `etiqueta_creada_en` | string (ISO datetime) | v0.91.0 | Timestamp de creación |
+| `etiqueta_modificado_en` | string (ISO datetime) | v0.91.0 | Cuándo se modificó por última vez (lo sella el sistema al guardar) |
+
+Compartida entre personas (`Persona.persona_etiqueta_id`), sin vista propia: se gestiona desde el desplegable "＋ Crear nueva etiqueta…" del formulario de Persona (`abrirDialogoEtiqueta`, `assets/js/formularios-entidades.js`), mismo patrón que Categoría/Ubicación/Meta en el formulario de tarea. El botón "✏️" junto al desplegable edita la etiqueta ya elegida (nombre, color, o eliminarla — al eliminarla, las personas que la usaban quedan con `persona_etiqueta_id: null`).
+
+## Plantilla
+
+Un procedimiento típico guardado como grupo de tareas encadenadas (v0.99.0). No es una tarea: es el molde con el que se crean varias a la vez.
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `plantilla_id` | string (UUID) | v0.99.0 | Identificador único |
+| `plantilla_nombre` | string | v0.99.0 | Nombre del procedimiento (ej. "Tramitar el pasaporte") |
+| `plantilla_descripcion` | string, default `''` | v0.99.0 | Nota opcional |
+| `plantilla_pasos` | array de Paso | v0.99.0 | Los pasos **en el orden de la cadena**: el primero se hace primero, el último es la tarea objetivo (la que lleva la fecha límite final). Mínimo 2 |
+| `plantilla_creada_en` | string (ISO datetime) | v0.99.0 | Timestamp de creación |
+| `plantilla_modificado_en` | string (ISO datetime) | v0.99.0 | Cuándo se modificó por última vez (lo sella el sistema al guardar) |
+
+**Paso** (objeto dentro de `plantilla_pasos`, sin id propio): `paso_nombre`, `paso_duracion_min` (default 30), `paso_descripcion`, `paso_dias_antes` (días antes de la fecha límite final en que tiene que estar listo ese paso; 0 = el mismo día), `paso_dias_habiles`, `paso_costo_estimado`, `paso_disfrute`, `paso_requiere_clima_bueno`, `paso_urgente` — se copian a `tarea_*` de la tarea que crea cada paso. La categoría, la fecha límite final y "habilitada desde" **no** se guardan: se piden al usar la plantilla.
+
+Se gestiona desde el botón "📋 Plantillas" de la vista Tareas (`assets/js/plantillas.js`) y se sincroniza con Drive como el resto de las colecciones. Eliminar una plantilla no toca las tareas ya creadas con ella.
+
+## Mejora
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `mejora_id` | string (UUID) | MVP | Identificador único |
+| `mejora_tarea_nombre` | string | MVP | Nombre de la tarea de mantenimiento a la que se refiere la nota. La identidad de una tarea que se repite es su nombre (renombrarla corta la relación) |
+| `mejora_texto` | string | MVP | "¿Cómo se podría mejorar para la próxima vez?" |
+| `mejora_fecha` | string (ISO datetime) | MVP | Cuándo se escribió la nota |
+| `mejora_aplicada` | boolean (default `false`) | MVP | Si la nota ya se incorporó a la tarea. Se marca y desmarca desde la vista Mejoras |
+| `mejora_modificado_en` | string (ISO datetime) | MVP | Cuándo se modificó por última vez (lo sella el sistema al guardar). No se edita a mano |
+
+Se crea sola al cumplir una tarea de mantenimiento con nota. Es independiente de las instancias de la tarea (sobrevive cuando las completadas se archiven); además la última nota se sigue anexando a la descripción de la copia. Se repasan en la vista **Mejoras** (Ronda 6, v0.57.0): se pueden marcar como aplicadas, editar y eliminar; las pendientes de una tarea de mantenimiento también se muestran en su tarjeta de Hoy.
+
+## Cumplimiento
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `cumplimiento_id` | string (UUID) | MVP | Identificador único |
+| `cumplimiento_tarea_id` | string (UUID) | MVP | `Tarea.tarea_id` que se cumplió (permite deshacer el registro si la tarea se reabre; puede quedar sin tarea si esta se elimina o archiva) |
+| `cumplimiento_tarea_nombre` | string | MVP | Nombre de la tarea al cumplirse (identidad del hábito) |
+| `categoria_id` | string \| null | MVP | Categoría de la tarea al cumplirse |
+| `cumplimiento_fecha` | string (ISO datetime) | MVP | Cuándo se cumplió (`tarea_fecha_fin`) |
+| `cumplimiento_fecha_limite` | fecha±hora \| "" | MVP | Vencimiento esperado (`tarea_fecha_limite`) al cumplirse, para distinguir "a tiempo" de "tarde" |
+| `cumplimiento_mantenimiento` | boolean | MVP | Si la tarea era de mantenimiento (para filtrar el mapa de hábitos) |
+| `cumplimiento_intervalo` | `{ cantidad, unidad }` \| null | MVP | Cada cuánto se repetía la tarea (`tarea_mantenimiento_intervalo`) al cumplirla. Permite saber si un hábito era diario (y entonces un día sin registro es un incumplimiento) |
+| `cumplimiento_dias_habiles` | number[] (0-6), vacío = todos | MVP | Días de la semana en que la tarea podía hacerse (`tarea_dias_habiles`) al cumplirla: los demás días no cuentan en el mapa de hábitos |
+| `cumplimiento_duracion_estimada` | number (minutos) \| `null` | v0.104.0 | Duración estimada de la tarea al cumplirla (`tarea_duracion_min`) |
+| `cumplimiento_duracion_real` | number (minutos) \| `null` | v0.104.0 | Cuánto tardó de verdad, si el usuario lo contó (preferencia «Preguntar cuánto tardé»). Con la estimada alimenta Estadísticas → «Estimado vs. real» |
+| `cumplimiento_modificado_en` | string (ISO datetime) | MVP | Cuándo se modificó por última vez (lo sella el sistema al guardar). No se edita a mano |
+
+Registro liviano, una entrada por cada tarea que se completa. Reabrir la tarea borra su registro. Es la base del mapa de hábitos (solapa Hábitos de Estadísticas) y sobrevive al archivado de las tareas completadas. Un **hábito** es una tarea de mantenimiento, identificada por su nombre: los registros con `cumplimiento_mantenimiento = true` y el mismo `cumplimiento_tarea_nombre`. Al renombrar una tarea de mantenimiento, los registros con el nombre viejo pasan al nuevo.
+
+## Preferencias
+
+Un **único registro** (`preferencias_id: "unica"`) que se sincroniza con Drive, para que las preferencias valgan en todos los dispositivos. Si no existe, se usan los valores por defecto (no hace falta crearlo). Se administra en Configuraciones → Tiempo disponible y, para una fecha puntual, tocando la barra de carga de un día en Semana.
+
+| Campo | Tipo | Fase | Descripción |
+|---|---|---|---|
+| `preferencias_id` | `"unica"` | Ronda 9b | Identificador (siempre el mismo) |
+| `preferencias_nombre` | string | Ronda 9b | `"Preferencias"` (para los avisos de sincronización) |
+| `pref_tope_dias` | number[7] | Ronda 9b | Minutos que se quieren dedicar a tareas cada día de la semana, **domingo primero** (índice = `Date.getDay()`). Por defecto 1440 cada día (v0.64.0, antes 180) |
+| `pref_franja` | `{ inicio, fin }` `"HH:MM"` | Ronda 9b | Parte del día en que se proponen horarios y en que cuenta el tiempo libre. Por defecto `00:00`–`24:00` (antes solo en `localStorage`; se migra sola) |
+| `pref_calendarios` | string[] \| `null` | Ronda 9b | Ids de los calendarios de Google que se leen; `null` = todos |
+| `pref_ignorar_todo_el_dia` | boolean | Ronda 9b | Los eventos de todo el día no ocupan tiempo. Por defecto `true` |
+| `pref_ignorar_rechazados` | boolean | Ronda 9b | Los eventos que el usuario rechazó no ocupan tiempo. Por defecto `true` |
+| `pref_ignorar_disponible` | boolean | Ronda 9b | Los eventos marcados como «Disponible» (en vez de «Ocupado») no ocupan tiempo. Por defecto `true` (v0.77.0, antes `false` — un evento "Disponible" contaba como ocupado, causando reprogramaciones no deseadas) |
+| `pref_horizonte_dias` | number | Ronda 9b | Cuántos días hacia adelante se leen los eventos de Calendar. Por defecto 90 (30 · 60 · 90 · 180) |
+| `pref_capacidad_por_fecha` | `{ "YYYY-MM-DD": minutos }` | Ronda 9b | Capacidad fijada por el usuario para un día puntual (0 = ningún tiempo). Manda sobre el tope y sobre Calendar; se descartan las fechas pasadas al guardar |
+| `pref_habitos_ocultos` | array de nombres de hábito, default `[]` | v0.104.0 | Hábitos que el usuario ocultó de la matriz de Estadísticas → Hábitos (por nombre de tarea). No se borra nada: el historial sigue |
+| `pref_preguntar_tiempo_real` | boolean, default `false` | v0.104.0 | Si es `true`, al completar una tarea la app pregunta cuántos minutos tardó (opcional) |
+| `pref_bloques_dias` | array de 7 listas de `{ inicio: "HH:MM", fin: "HH:MM" }` \| `null` | v0.105.0 | Horarios disponibles por día de la semana (índice 0 = domingo). Uno o varios bloques por día, sin pisarse ni quedar pegados, de 00:00 a 24:00; lista vacía = día libre. `null` = se derivan de `pref_franja` y `pref_tope_dias` (datos de antes). Reemplazan a ambos en la interfaz |
+| `pref_fecha_nacimiento` | fecha `YYYY-MM-DD` \| `""` | v0.105.0 | Fecha de nacimiento del usuario, para el módulo Memento mori. Se pide una sola vez |
+| `pref_esperanza_vida` | number (años, 40–120), default `80` | v0.105.0 | Expectativa de vida para dibujar la cuadrícula de Memento mori |
+| `pref_ubicacion_clima` | `ubicacion_id` \| `null` | v0.79.0 | Ubicación de referencia para el pronóstico de la vista Semana (ícono del día, amanecer/atardecer, degradé de temperatura/lluvia). Se elige en Configuraciones → 🌦️ Clima; sin ubicación (o sin coordenadas cargadas) esas funciones no muestran nada |
+| `preferencias_modificado_en` | string (ISO datetime) | Ronda 9b | Lo sella el sistema al guardar. No se edita a mano |
+
+## Sincronización: sellos de modificación y archivo de Drive
+
+Cada entidad lleva un campo `<entidad>_modificado_en` (ver tablas de arriba). No se edita a mano: el sistema lo sella al guardar, comparando contra el guardado anterior, y sirve para mezclar los cambios de distintos dispositivos (gana la versión más reciente de cada entidad; ver `LOGICA_FUNCIONES.md`, `sincronizacion.js`). Un sello vacío significa "más viejo que cualquier otro".
+
+Los datos viven en **un único archivo en el Google Drive del usuario**, `super-todo-list-datos.json`, con esta estructura:
+
+```
+{
+  "formato": 3,
+  "guardado_en": "ISO datetime del guardado",
+  "categorias": Categoria[], "ubicaciones": Ubicacion[], "metas": Meta[], "personas": Persona[], "tareas": Tarea[],
+  "mejoras": Mejora[], "cumplimientos": Cumplimiento[], "preferencias": Preferencias[],
+  "eliminados": [ { "coleccion": "tareas", "id": "...", "eliminado_en": "ISO datetime" } ]
+}
+```
+
+`eliminados` registra qué se borró y cuándo (durante 90 días) para que una entidad eliminada en un dispositivo no reviva al mezclar con otro. El `formato` 3 (Ronda 9b) suma `preferencias`; una versión de la app que encuentra un archivo con un `formato` mayor al que conoce queda en **solo lectura** con un aviso, para no pisar lo que no entiende. Los archivos anteriores (sin `formato` ni sellos, o con los formatos viejos de campos) se migran solos al leerlos.
+
+Los datos reales con información personal **no se versionan**; en el repositorio solo hay `datos/categorias.ejemplo.json`, `datos/tareas.ejemplo.json` y `datos/esquema.json` (el esquema describe la estructura del archivo de Drive).

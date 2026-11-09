@@ -1,0 +1,75 @@
+# AGENTS.md
+
+Convenciones para quien (humano o agente de IA) trabaje en este repositorio.
+
+## Idioma
+
+- Documentación, UI y textos visibles: **español castellano**.
+- Nombres de campos de datos (JSON), variables y funciones en el código JS: **español castellano**, para minimizar la fricción de traducción cuando el usuario lea o edite el código directamente. Excepción: palabras reservadas/API del navegador (`addEventListener`, `fetch`, etc.) se mantienen en inglés porque son parte del lenguaje/plataforma.
+- Campos propios de una entidad siguen el patrón `entidad_atributo` (ej. `Tarea.nombre` → `tarea_nombre`, `Categoria.color` → `categoria_color`), para evitar ambigüedad entre entidades. Los campos que ya son una referencia a otra entidad (`categoria_id`, `ubicacion_id`, `tarea_dependiente`, `meta_id`) quedan sin ese prefijo, porque ya son inequívocos.
+
+## Arquitectura
+
+- Sitio 100% cliente: HTML/CSS/JS vanilla, **sin backend, sin build tools, sin frameworks**. No agregar `npm`, bundlers ni dependencias externas salvo que se discuta explícitamente con el usuario — es una decisión de simplicidad tomada a propósito, no un descuido.
+- Persistencia: `assets/js/almacenamiento.js` centraliza el estado en memoria y su sincronización con **Google Drive por API, único destino de los datos** (buffer local durable en IndexedDB vía `almacenamiento-local.js`, mezcla entre dispositivos en `sincronizacion.js`, permiso único de Google en `google-auth.js`). **`localStorage` solo guarda preferencias** (tema, ubicación actual, flag de conexión), nunca datos de tareas. Las vistas (`views/*.view.js`) importan `estado` y `persistirYNotificar()` desde ahí; no duplicar lógica de guardado en las vistas, y no mostrar nunca "guardado" antes de que Drive confirme.
+- Cada vista expone una única función `renderVistaX(contenedor)` que redibuja su contenido en el contenedor recibido. El router en `assets/js/app.js` decide qué vista renderizar según el hash de la URL.
+
+## Estructura de carpetas
+
+- `assets/css/` — estilos.
+- `assets/js/` — motor de la app: estado, persistencia, modelos de datos, utilidades, router.
+- `views/` — un archivo por vista/pantalla (lógica de UI y eventos de esa vista).
+- `datos/` — esquema JSON y datos de ejemplo versionados. Los datos reales del usuario (`categorias.json`, `tareas.json`) nunca se commitean.
+
+## Cómo agregar cosas
+
+- **Nuevo campo al modelo de datos:** actualizarlo en `assets/js/modelos.js` (factory correspondiente), en `datos/esquema.json`, y documentarlo en `DICCIONARIO_DE_DATOS.md` con la fase a la que pertenece.
+- **Nueva función o cambio de lógica no trivial:** documentarlo en `LOGICA_FUNCIONES.md` (qué hace, en lenguaje natural). Si afecta el orden/prioridad de las tareas, actualizar también `REGLAS_DE_PRIORIDAD.md`. Si el sistema hace algo solo, sin acción directa del usuario (ej. un desbloqueo en cascada, una migración, un clonado), documentarlo también en `PROCESOS_AUTOMATICOS.md`.
+- **Nuevo flujo de usuario, o cambio a uno existente:** actualizar la entrada correspondiente en `CASOS_DE_USO.md` (o agregar una nueva, con el mismo formato objetivo/disparador/pasos/vistas-funciones/resultado/fricciones).
+- **Cambio de diseño acordado con el usuario:** registrarlo en `REDISENO.md` (el "cómo debería ser", con estado ✅ definido / ❓ abierto / 🔮 post-v1.0). `CASOS_DE_USO.md` describe solo la realidad de hoy; lo que el usuario pide y todavía no existe se marca ahí con ⏳.
+- **Nueva vista:** crear `views/nombre.view.js` exportando `renderVistaNombre(contenedor)`, registrarla en el objeto `VISTAS` de `assets/js/app.js`.
+- **Archivo nuevo en `assets/js/` o `views/`:** sumarlo también a `ARCHIVOS_PRECACHE` en `sw.js`, para que la primera carga offline (sin visitas previas) lo incluya.
+- **Nueva funcionalidad grande:** primero registrarla como ítem en `BACKLOG.md` bajo la fase que corresponda (ver `SPEC.md` para la definición de fases), salvo que el usuario ya la haya pedido explícitamente para la iteración actual.
+
+## Metodología de trabajo (acordada con el usuario, v0.107.2)
+
+- **Desarrollo por rebanada vertical (vertical slice):** cada entrega es una funcionalidad completa y chica (datos + lógica + interfaz) que el usuario puede usar y probar enseguida. Nada de entregas "a medias por capa".
+- **Historias de usuario atómicas** con el formato «Como [tipo de usuario] quiero [hacer algo] para [beneficio]», cada una con un código (`H01`, `H02`…) y criterios de aceptación verificables. Viven en el backlog, ordenado tipo kanban (Backlog → Listo para hacer → En curso → Para probar → Hecho).
+- **AI pair programming:** la IA es el *driver* (escribe) y el usuario es el *navigator* (decide el rumbo, prueba y da feedback).
+- **Reparto de modelos:** Opus analiza y define los casos (historias, casos borde, decisiones); las tareas ya definidas (programar, documentar, convertir archivos) se delegan a Sonnet o Haiku, y Opus revisa el resultado antes de mostrarlo.
+- **Primero que funcione, después documentar:** se entrega la funcionalidad para que el usuario la pruebe; la documentación extensa (`LOGICA_FUNCIONES.md`, `CASOS_DE_USO.md`, etc.) se completa una vez que el usuario confirma que quedó bien. `CHANGELOG.md` y la versión se actualizan en cada entrega.
+- **Preguntas con código:** cada pregunta lleva un código (`P1`, `P2`…) y cada respuesta sugerida un sub-código (`P1-A`, `P1-B`…), para que el usuario pueda responder referenciándolos. Hacer todas las preguntas necesarias, sugiriendo opciones.
+- **Opciones visuales antes de programar:** toda historia con cambios de interfaz arranca con **3 opciones visuales** (maquetas) para que el usuario elija una o pida correcciones. Las correcciones de lógica sin cambio visual no lo necesitan.
+
+## Protección de los datos del usuario (la app está en uso real)
+
+- **Nunca perder información.** Todo cambio en la forma de los datos lleva su migración en `almacenamiento.js` (`migrarTarea`, etc.) y una prueba en `pruebas/`. Un campo no se borra: se deja de usar.
+- Los procesos automáticos **solo completan lo que falta**: no pisan lo que el usuario cargó a mano (fecha fijada con 📌, fecha límite, textos).
+- Antes de una entrega que cambie datos guardados, recordarle al usuario exportar una copia de seguridad (Configuraciones) y hacer un ensayo en seco sobre una copia de sus datos reales para mostrarle qué cambiaría.
+- **Entorno de pruebas (H16):** fuera de la app real, `assets/js/entorno.js` cambia el prefijo de todo lo guardado (`PREFIJO_APP`: base local, `localStorage`, archivo de Drive; y la caché en `sw.js`). **Toda clave nueva de `localStorage`, base local o archivo de Drive debe usar `PREFIJO_APP`**, nunca el literal `'super-todo-list'`, para que pruebas y app real no se mezclen. Las entregas se prueban primero en el entorno de pruebas, con una copia de seguridad importada.
+- **Pruebas automáticas:** `node --test pruebas/*.test.js` (Node 22+, sin npm ni dependencias; los archivos de prueba no se suman a `sw.js`). Correrlas antes de cada commit; sumar una prueba por cada bug corregido.
+
+## Cómo definir funcionalidades con el usuario
+
+- Al definir o discutir una funcionalidad, **plantear proactivamente los casos borde y escenarios que el usuario no mencionó** (ej. qué pasa al eliminar una tarea del medio de una cadena de dependencias, al alternar dispositivos, al fallar un guardado, con datos ya existentes), con una propuesta concreta y una pregunta cerrada para confirmar. Al usuario le resulta muy útil que se le señalen los casos que le faltó completar.
+- Preferir preguntas cerradas o de opción múltiple cuando hay que decidir, dejando las abiertas para lo que realmente no tiene una respuesta obvia. No dar por cerrada una decisión ambigua: confirmarla.
+- No modificar el texto que el usuario escribió a mano en los `.md` para "corregirlo": si describe algo que el código no hace, marcarlo con ⏳ y preguntar si es un pedido nuevo o un error.
+- **No reemplazar todavía los datos personales del usuario por datos genéricos** en ejemplos, docs ni textos: el contexto real es útil para trabajar bien. Hay un ítem en `BACKLOG.md` ("Limpieza de datos personales antes de dejar el repositorio público") para hacerlo al final del proyecto. Mientras tanto, no agregar datos realmente sensibles (contraseñas, tokens, ni datos de terceros) a ningún archivo versionado.
+- `SPEC.md` y `README.md` son documentación viva: se actualizan cuando cambia lo que describen (alcance, decisiones de diseño, instrucciones de uso).
+
+## Versionado
+
+- Esquema `vMayor.Menor.Parche` (semver). Cada entrega funcional nueva suma una entrada en `CHANGELOG.md`.
+- La versión también se muestra en la cabecera de la app (constante `VERSION` en `assets/js/app.js`) — actualizarla junto con `CHANGELOG.md` en cada entrega.
+- **`README.md` siempre debe indicar la versión más nueva**: actualizar su sección "Estado actual" en cada entrega.
+
+## Flujo de Git
+
+- **Todo el trabajo de un agente se hace sobre la rama `develop`.** Nunca commitear ni hacer push directo a `main`.
+- El merge de `develop` a `main` y el push a `main` solo se hacen cuando el usuario lo confirma explícitamente en la conversación.
+- Mensajes de commit: cortos, en español, describiendo el "por qué" del cambio más que el "qué" (el diff ya muestra el qué).
+
+## Antes de dar por terminada una tarea
+
+- Verificar manualmente en el navegador que el flujo afectado funciona (crear/editar/eliminar, filtros, persistencia tras recargar la página).
+- Actualizar `BACKLOG.md` (marcar ítems como hechos) y `CHANGELOG.md` cuando se cierre una entrega.
